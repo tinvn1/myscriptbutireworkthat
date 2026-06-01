@@ -1,7 +1,7 @@
 -- Feel free to adjust
 -- Optimized Custom Mode: Pure Power Box Route (Using Original Crawl Mechanic)
 -- Original Author: TheAnonymous in RScript
--- Updated & Optimized by: TinHub Project + Auto Hold & Triple Tap Integrated
+-- Updated & Optimized by: TinHub Project + Auto Hold, Triple Tap/Press Integrated
 
 print("Loading via TinHub Engine")
  
@@ -199,20 +199,19 @@ local function runPipeline()
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
         task.wait(0.5)
  
-        -- 3. CƠ CHẾ CHẠM 3 LẦN VÀ TỰ ĐỘNG GIỮ (TRIPLE TAP & AUTO HOLD)
+        -- 3. CƠ CHẾ NHẤP NHẢ 3 LẦN VÀ TỰ ĐỘNG GIỮ (PC & MOBILE ADAPTIVE)
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
-                print("[Pipeline] Tiến hành chạm 3 lần và kích hoạt giữ nút...")
                 
                 local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
-                local noticeText = "Đang chạm 3 lần và giữ tâm -20px trong 11 giây..."
+                local noticeText = "Đang chạm màn hình 3 lần và giữ máy trong 11 giây..."
                 if isPC then
-                    noticeText = "Đang chạm 3 lần và đè phím [E] trong 11 giây..."
+                    noticeText = "Đang nhấp nhả phím [E] 3 lần và đè giữ trong 11 giây..."
                 end
 
                 StarterGui:SetCore("SendNotification", {
-                    Title = "Triple Tap & Hold System",
+                    Title = "Interaction System",
                     Text = noticeText,
                     Duration = 3
                 })
@@ -221,15 +220,27 @@ local function runPipeline()
                 local centerX = Camera.ViewportSize.X / 2
                 local targetY = (Camera.ViewportSize.Y / 2) + OFFSET_DOWN
 
-                -- [BƯỚC 1]: THỰC HIỆN CHẠM (CLICK) 3 LẦN NHANH
-                for i = 1, 3 do
-                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0) -- Nhấn xuống
-                    task.wait(0.05)
-                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0) -- Thả ra
-                    task.wait(0.05)
+                -- [BƯỚC 1]: THỰC HIỆN NHẤP NHẢ 3 LẦN (TÙY THEO THIẾT BỊ)
+                if isPC then
+                    print("[Pipeline] Phát hiện PC: Tiến hành nhấp nhả phím E 3 lần...")
+                    for i = 1, 3 do
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)  -- Nhấn E xuống
+                        task.wait(0.05)
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) -- Thả E ra
+                        task.wait(0.05)
+                    end
+                else
+                    print("[Pipeline] Phát hiện Mobile: Tiến hành chạm màn hình 3 lần...")
+                    for i = 1, 3 do
+                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0) -- Chạm xuống
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0) -- Nhấc lên
+                        task.wait(0.05)
+                    end
                 end
 
-                -- [BƯỚC 2]: BẮT ĐẦU ĐÈ GIỮ (HOLD) NGAY SAU KHI CHẠM XONG
+                -- [BƯỚC 2]: BẮT ĐẦU ĐÈ GIỮ (HOLD) CHẶT NGAY SAU ĐÓ
+                print("[Pipeline] Bắt đầu đè giữ chặt nút kích hoạt...")
                 VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
                 if isPC then
                     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
@@ -257,12 +268,12 @@ local function runPipeline()
 
                 -- Thông báo hoàn thành
                 StarterGui:SetCore("SendNotification", {
-                    Title = "Triple Tap & Hold System",
-                    Text = isPC and "Đã hoàn thành tap + giữ phím [E]!" or "Đã chạm 3 lần và giữ đủ 11 giây!",
+                    Title = "Interaction System",
+                    Text = "Đã sửa xong máy điện, chuẩn bị đổi phòng!",
                     Duration = 3
                 })
 
-                print("[Pipeline] Triple tap and hold forced successfully!")
+                print("[Pipeline] Loop complete and keys released successfully!")
                 interactionSuccess = true
             end
         end
