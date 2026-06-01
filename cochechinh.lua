@@ -8,7 +8,7 @@ local ContentProvider = game:GetService("ContentProvider")
 while ContentProvider.RequestQueueSize > 0 do
     task.wait(0.5)
 end
-task.wait(2.0) -- Đợi thêm một chút để đảm bảo map đã dựng xong
+task.wait(1.5) -- Tối ưu lại thời gian đợi vừa đủ để map dựng
 
 -- SERVICES --
 local Workspace = game:GetService("Workspace")
@@ -20,11 +20,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local PermanentNoclipEnabled = true
 
--- --- CƠ CHẾ SƠ TÁN / REJOIN TỐI ƯU CỦA SCRIPT 2 (EVACUATE SERVER) ---
+-- --- CƠ CHẾ SƠ TÁN / REJOIN CỰC TỐC (VOTE PLAY AGAIN) ---
 local function safeRejoin(reason)
-    warn("[CRITICAL EVACUATION / REJOIN]: " .. tostring(reason))
+    warn("[CRITICAL REJOIN]: " .. tostring(reason))
     task.spawn(function()
-        -- 1. Ưu tiên sử dụng Remote nhảy server / chơi lại nhanh của game (Tối ưu tốc độ)
+        -- 1. Kích hoạt Remote Play Again của game để chuyển phòng trong 1 giây
         local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
             and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
             and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
@@ -34,34 +34,32 @@ local function safeRejoin(reason)
                 PlayAgainRemote:FireServer()
             end)
             print("[Escape] Đang thực hiện VotePlayAgain để đổi server nhanh...")
-            task.wait(1.5) -- Đợi remote xử lý
+            task.wait(1.0) -- Giảm thời gian chờ để ưu tiên tốc độ chuyển cảnh
         end
         
-        -- 2. Dự phòng: Nếu remote lỗi hoặc chậm, dùng TeleportService thông thường
-        print("[Escape] Sử dụng phương thức Teleport dự phòng...")
+        -- 2. Phương thức dự phòng nếu lỗi remote
         local TeleportService = game:GetService("TeleportService")
         pcall(function()
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end)
 
-        -- 3. Cứu cánh cuối cùng: Tự Kick bản thân nếu bị kẹt (Dành cho Auto-Execute tự kết nối lại)
-        task.wait(3.5)
-        LocalPlayer:Kick("[REJOIN FAILED] Đang ép ngắt kết nối để Rejoin qua Trình quản lý!")
+        -- 3. Cứu cánh cuối cùng (Tự Kick để Rejoin tự động)
+        task.wait(2.5)
+        LocalPlayer:Kick("[REJOIN FAILED] Ép ngắt kết nối để Rejoin!")
     end)
     
-    -- Dừng luồng script hiện tại ngay lập tức để tránh lỗi xung đột dữ liệu
-    task.wait(0.1)
-    error("Script execution terminated via safeRejoin.")
+    task.wait(0.05)
+    error("Script execution terminated.")
 end
 
--- ANTI-SOCIAL / RADAR QUÉT NGƯỜI CHƠI KHÁC (Chỉ cho phép Solo)
+-- RADAR QUÉT NGƯỜI CHƠI KHÁC (Bảo mật Solo Farm)
 if #Players:GetPlayers() > 1 then
-    safeRejoin("Phát hiện phòng đã có người chơi khác từ trước!")
+    safeRejoin("Phát hiện phòng có người! Đổi server ngay.")
 end
 
 Players.PlayerAdded:Connect(function(newPlayer)
     if newPlayer ~= LocalPlayer then
-        safeRejoin("Phát hiện người chơi khác vừa vào phòng (" .. newPlayer.Name .. "). Tiến hành tẩu thoát!")
+        safeRejoin("Phát hiện người chơi khác vừa vào phòng. Tẩu thoát!")
     end
 end)
 
@@ -80,14 +78,12 @@ local function StartPermanentNoclip()
  
             local character = LocalPlayer.Character
             if character then
-                -- Loại bỏ hoàn toàn va chạm của tất cả các bộ phận nhân vật trước khi chu kỳ physics tính toán
                 for _, child in ipairs(character:GetDescendants()) do
                     if child:IsA("BasePart") and child.CanCollide then
                         child.CanCollide = false
                     end
                 end
  
-                -- Triệt tiêu gia tốc/vận tốc gốc để tránh bị chống gian lận giật ngược (Anti-cheat rubberbanding)
                 local hrp = character:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -98,23 +94,19 @@ local function StartPermanentNoclip()
  
     ConnectNoclip()
  
-    -- Tự động áp dụng lại vòng lặp Noclip mỗi khi nhân vật hồi sinh (Respawn)
     LocalPlayer.CharacterAdded:Connect(function()
         task.wait(0.1)
         ConnectNoclip()
     end)
 end
 
--- Kích hoạt Noclip chạy ngầm ngay khi chạy script
 StartPermanentNoclip()
-print("[Noclip] Đã kích hoạt cơ chế xuyên tường vĩnh viễn!")
 
 -- --- 2. HÀM DI CHUYỂN ADAPTIVE CRAWL (XUYÊN TƯỜNG GỐC) ---
 local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     local finalTarget = targetPos + Vector3.new(0, 3, 0)
     local FAST_SPEED = 35     
     local SLOW_SPEED = 10     
-    -- Sửa lại bug nhỏ: script gốc dùng STEP_DISTANCE nhưng khai báo cục bộ là activeStepDistance bên dưới, đồng bộ lại thành 0.25
     local STEP_DISTANCE = 0.25  
     local CLEARANCE_COOLDOWN = 0.5  
     local lastWallDetectedTime = 0
@@ -124,11 +116,10 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.FilterDescendantsInstances = {character} 
  
-    -- [WATCHDOG] Cấu hình chống kẹt góc khi di chuyển
     local isMoving = true
     local lastPosition = humanoidRootPart.Position
     local lastMoveTime = os.clock()
-    local STUCK_THRESHOLD = 3 -- Tối đa 3 giây đứng im tại chỗ sẽ tự nhảy thẳng tới đích
+    local STUCK_THRESHOLD = 3 
 
     task.spawn(function()
         while isMoving do
@@ -143,7 +134,7 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
                 lastMoveTime = os.clock()
             else
                 if os.clock() - lastMoveTime >= STUCK_THRESHOLD then
-                    warn("[Watchdog] Phát hiện bị kẹt góc nặng! Đang Bypass dịch chuyển thẳng tới đích...")
+                    warn("[Watchdog] Phát hiện kẹt! Dịch chuyển thẳng tới đích...")
                     humanoidRootPart.CFrame = CFrame.new(finalTarget)
                     break
                 end
@@ -198,16 +189,14 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     isMoving = false
 end
 
--- --- 4. CƠ CHẾ QUÉT VÀ TƯƠNG TÁC POWER BOX ---
+-- --- 4. CƠ CHẾ TƯƠNG TÁC VÀ KÍCH HOẠT REJOIN LẬP TỨC KHI XONG ---
 local function interactWithClosestPowerBox()
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
     local MapFolder = Workspace:FindFirstChild("Map")
     
     local powerBoxData = {}
-    local interactionSuccess = false
  
-    -- Bước A: Quét toàn bộ map để tìm các model "Power Box" nằm trong "Power Plant"
     if MapFolder and MapFolder:FindFirstChild("Tiles") then
         for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
             if child.Name == "Power Plant" then
@@ -222,7 +211,6 @@ local function interactWithClosestPowerBox()
         end
     end
  
-    -- Bước B: Nếu tìm thấy Box, tiến hành sắp xếp để chọn cái gần nhất
     if #powerBoxData > 0 then
         local currentPos = humanoidRootPart.Position
         table.sort(powerBoxData, function(a, b)
@@ -234,49 +222,38 @@ local function interactWithClosestPowerBox()
  
         print("[PowerBox] Đang di chuyển tới Power Box gần nhất...")
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
-        task.wait(0.5)
- 
-        -- Bước C: Kiểm tra khoảng cách an toàn (< 15 studs) và kích hoạt nút (ProximityPrompt)
+        
+        -- Kiểm tra khoảng cách để tương tác nút
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
-                print("[PowerBox] Đang tương tác với nút...")
-                for i = 1, 3 do
-                    if fireproximityprompt then
-                        fireproximityprompt(prompt)
-                    else
-                        prompt:InputHoldBegin()
-                        task.wait(prompt.HoldDuration + 0.05)
-                        prompt:InputHoldEnd()
-                    end
-                    task.wait(0.1)
+                print("[PowerBox] Đang tương tác sửa máy...")
+                
+                -- Thực hiện tương tác kích hoạt nút sửa máy
+                if fireproximityprompt then
+                    fireproximityprompt(prompt)
+                else
+                    prompt:InputHoldBegin()
+                    task.wait(prompt.HoldDuration + 0.02) -- Tối ưu thời gian nhấn giữ nút vừa đủ khít
+                    prompt:InputHoldEnd()
                 end
-                print("[PowerBox] Tác động thành công!")
-                interactionSuccess = true
+                
+                -- KÍCH HOẠT REJOIN NGAY LẬP TỨC SAU KHI CLICK XONG NÚT SỬA MÁY
+                print("[PowerBox] Đã sửa máy xong! Tiến hành chuyển server siêu tốc...")
+                safeRejoin("Hoàn thành sửa máy (Power Box)")
             end
         end
     else
-        warn("[PowerBox] Không tìm thấy Power Box nào trên bản đồ.")
+        warn("[PowerBox] Không tìm thấy Power Box. Đổi server ngay...")
+        safeRejoin("Không thấy Power Box trên bản đồ")
     end
-    
-    return interactionSuccess
 end
 
--- --- 5. HẸN GIỜ ÉP REJOIN DỰ PHÒNG SAU 1 PHÚT (Bảo hiểm chống kẹt / giống script 2) ---
-task.delay(60, function()
-    safeRejoin("Hết thời gian chờ tối đa cho phép (60 giây Watchdog)")
+-- --- 5. BẢO HIỂM CHỐNG KẸT MÀN HÌNH (WATCHDOG 45 GIÂY) ---
+task.delay(45, function()
+    safeRejoin("Quá thời gian farm cho phép (Watchdog Timeout)")
 end)
 
--- --- 6. LUỒNG THỰC THI CHÍNH VÀ ĐIỀU HƯỚNG TỐT NHẤT ---
-print("[Main] Script khởi động hoàn tất. Tiến hành quét mục tiêu...")
-local completed = interactWithClosestPowerBox()
-
-if completed then
-    print("[Main] Đã hoàn thành xong việc! Chờ 0.5 giây để đồng bộ phần thưởng rồi tiến hành Rejoin...")
-    task.wait(0.5)
-    safeRejoin("Hoàn thành tương tác Power Box thành công")
-else
-    print("[Main] Không thể tương tác hoặc không tìm thấy mục tiêu. Đổi server ngay lập tức...")
-    task.wait(0.5)
-    safeRejoin("Thất bại hoặc Không thấy Power Box trên bản đồ")
-end
+-- --- 6. LUỒNG THỰC THI CHÍNH ---
+print("[Main] Bắt đầu quét mục tiêu sửa máy...")
+interactWithClosestPowerBox()
