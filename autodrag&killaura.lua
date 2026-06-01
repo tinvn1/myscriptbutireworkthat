@@ -21,7 +21,7 @@ local CONFIG = {
     MaxTargets = 4,            -- Tối đa 4 mục tiêu cùng lúc
 
     -- Cấu hình Auto Drag (Nhặt đồ chuẩn Mobile)
-    DragEnabled = true,        -- Bật/Tắt Auto Drag
+    DragEnabled = false,        -- Bật/Tắt Auto Drag
     DetectRange = 15,           -- Tầm quét 9 studs vừa phải để Mobile né gom quá nhiều đồ gây lag
     FollowDistance = 2.5,      -- Giữ đồ sát hông (2.5 studs) để giảm biên độ lắc lư khi đổi hướng
     MaxHoldingItems = 8,       -- Giới hạn gom tối đa 8 món để tránh quá tải engine vật lý của điện thoại
