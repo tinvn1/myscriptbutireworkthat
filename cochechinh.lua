@@ -12,8 +12,40 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.FilterDescendantsInstances = {character} 
  
+    -- [WATCHDOG CONFIG] Thiết lập cấu hình chống kẹt
+    local isMoving = true
+    local lastPosition = humanoidRootPart.Position
+    local lastMoveTime = os.clock()
+    local STUCK_THRESHOLD = 3 -- Số giây tối đa đứng yên một chỗ trước khi tính là bị kẹt
+
+    -- Khởi chạy Watchdog ngầm
+    task.spawn(function()
+        while isMoving do
+            task.wait(0.5)
+            if not humanoidRootPart or not humanoidRootPart.Parent then break end
+            
+            local currentPos = humanoidRootPart.Position
+            local distanceMoved = (currentPos - lastPosition).Magnitude
+            
+            if distanceMoved > 0.5 then
+                lastPosition = currentPos
+                lastMoveTime = os.clock()
+            else
+                if os.clock() - lastMoveTime >= STUCK_THRESHOLD then
+                    warn("[Watchdog] Phát hiện nhân vật bị kẹt góc! Kích hoạt Teleport Bypass...")
+                    humanoidRootPart.CFrame = CFrame.new(finalTarget)
+                    break
+                end
+            end
+        end
+    end)
+ 
     while true do
-        if not humanoidRootPart or not humanoidRootPart.Parent then break end
+        if not humanoidRootPart or not humanoidRootPart.Parent then 
+            isMoving = false
+            break 
+        end
+        
         local currentPos = humanoidRootPart.Position
         local flatTarget = Vector3.new(finalTarget.X, lockedYHeight, finalTarget.Z)
         local remainingVector = flatTarget - currentPos
@@ -26,6 +58,7 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
             humanoidRootPart.Anchored = true
             task.wait(0.05)
             humanoidRootPart.Anchored = false 
+            isMoving = false
             break
         end
  
@@ -51,9 +84,36 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
         humanoidRootPart.CFrame = CFrame.new(flattenedPosition)
         task.wait(delayInterval)
     end
+    isMoving = false
 end
 
--- --- 2. CƠ CHẾ QUÉT VÀ TƯƠNG TÁC POWER BOX ---
+-- --- 2. CƠ CHẾ REJOIN (VÀO LẠI SERVER) ---
+local function safeRejoin()
+    print("[System] Hết thời gian 2 phút! Đang tiến hành Rejoin sang server mới...")
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Bỏ qua màn hình báo lỗi ngắt kết nối/bị kích nếu có
+    local coreGui = game:GetService("CoreGui")
+    if coreGui:FindFirstChild("RobloxPromptGui") then
+        local prompt = coreGui.RobloxPromptGui.promptOverlay:FindFirstChild("ErrorPrompt")
+        if prompt then
+            game:GetService("GuiService"):ClearError()
+        end
+    end
+
+    -- Thực hiện Teleport về lại game để nhảy server
+    pcall(function()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end)
+    
+    -- Đợi đề phòng lỗi mạng, sẽ cố gắng thử lại sau 5 giây
+    task.wait(5)
+    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end
+
+-- --- 3. CƠ CHẾ QUÉT VÀ TƯƠNG TÁC POWER BOX ---
 local function interactWithClosestPowerBox()
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
@@ -98,12 +158,10 @@ local function interactWithClosestPowerBox()
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
                 print("[PowerBox] Đang tương tác với nút...")
-                for i = 1, 3 do -- Thử kích hoạt 3 lần cho chắc chắn
+                for i = 1, 3 do
                     if fireproximityprompt then
-                        -- Nếu Executor hỗ trợ hàm kích hoạt nhanh (Synapse, Wave, Solara, v.v.)
                         fireproximityprompt(prompt)
                     else
-                        -- Giả lập giữ phím thủ công nếu chạy trên script thường
                         prompt:InputHoldBegin()
                         task.wait(prompt.HoldDuration + 0.05)
                         prompt:InputHoldEnd()
@@ -121,5 +179,11 @@ local function interactWithClosestPowerBox()
     return interactionSuccess
 end
 
--- Chạy thử nghiệm cơ chế gốc
+-- --- 4. KHỞI CHẠY HẸN GIỜ REJOIN TRƯỚC (BẮT BUỘC CHẠY SONG SONG) ---
+task.delay(120, function()
+    safeRejoin()
+end)
+
+-- --- 5. CHẠY LUỒNG THỰC THI CHÍNH ---
+print("[Main] Script bắt đầu hoạt động. Đếm ngược 2 phút Rejoin kích hoạt!")
 interactWithClosestPowerBox()
