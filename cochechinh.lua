@@ -1,7 +1,7 @@
 -- Feel free to adjust
 -- Optimized Custom Mode: Pure Power Box Route (Using Original Crawl Mechanic)
 -- Original Author: TheAnonymous in RScript
--- Updated & Optimized by: TinHub Project + Auto Hold, Triple Tap/Press Integrated
+-- Updated & Optimized by: TinHub Project + Auto Hold, Triple Tap/Press Integrated (Double Sequence)
 
 print("Loading via TinHub Engine")
  
@@ -205,75 +205,83 @@ local function runPipeline()
             if prompt then
                 
                 local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
-                local noticeText = "Đang chạm màn hình 3 lần và giữ máy trong 11 giây..."
-                if isPC then
-                    noticeText = "Đang nhấp nhả phím [E] 3 lần và đè giữ trong 11 giây..."
-                end
-
-                StarterGui:SetCore("SendNotification", {
-                    Title = "Interaction System",
-                    Text = noticeText,
-                    Duration = 3
-                })
-
-                -- Tính toán tọa độ chính giữa màn hình hạ xuống 20 pixel
                 local centerX = Camera.ViewportSize.X / 2
                 local targetY = (Camera.ViewportSize.Y / 2) + OFFSET_DOWN
 
-                -- [BƯỚC 1]: THỰC HIỆN NHẤP NHẢ 3 LẦN (TÙY THEO THIẾT BỊ)
-                if isPC then
-                    print("[Pipeline] Phát hiện PC: Tiến hành nhấp nhả phím E 3 lần...")
-                    for i = 1, 3 do
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)  -- Nhấn E xuống
-                        task.wait(0.05)
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) -- Thả E ra
-                        task.wait(0.05)
+                -- Hàm thực hiện toàn bộ quy trình Tương tác (Nhấp nhả 3 lần + Đè giữ 11 giây)
+                local function executeInteractionSequence(sequenceNumber)
+                    local noticeText = "Lần " .. sequenceNumber .. ": Đang chạm màn hình 3 lần và giữ máy..."
+                    if isPC then
+                        noticeText = "Lần " .. sequenceNumber .. ": Đang nhấp nhả phím [E] 3 lần và đè giữ..."
                     end
-                else
-                    print("[Pipeline] Phát hiện Mobile: Tiến hành chạm màn hình 3 lần...")
-                    for i = 1, 3 do
-                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0) -- Chạm xuống
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0) -- Nhấc lên
-                        task.wait(0.05)
+
+                    StarterGui:SetCore("SendNotification", {
+                        Title = "Interaction System",
+                        Text = noticeText,
+                        Duration = 3
+                    })
+
+                    -- [BƯỚC 1]: THỰC HIỆN NHẤP NHẢ 3 LẦN
+                    if isPC then
+                        print("[Sequence " .. sequenceNumber .. "] Nhấp nhả phím E 3 lần...")
+                        for i = 1, 3 do
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)  -- Nhấn E xuống
+                            task.wait(0.05)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) -- Thả E ra
+                            task.wait(0.05)
+                        end
+                    else
+                        print("[Sequence " .. sequenceNumber .. "] Chạm màn hình 3 lần...")
+                        for i = 1, 3 do
+                            VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0) -- Chạm xuống
+                            task.wait(0.05)
+                            VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0) -- Nhấc lên
+                            task.wait(0.05)
+                        end
                     end
+
+                    -- [BƯỚC 2]: BẮT ĐẦU ĐÈ GIỮ (HOLD) CHẶT
+                    print("[Sequence " .. sequenceNumber .. "] Đè giữ nút...")
+                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
+                    if isPC then
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                    end
+
+                    if fireproximityprompt then
+                        fireproximityprompt(prompt)
+                    else
+                        prompt:InputHoldBegin()
+                    end
+
+                    -- [BƯỚC 3]: DUY TRÌ TRẠNG THÁI GIỮ TRONG 11 GIÂY
+                    task.wait(HOLD_DURATION)
+
+                    -- [BƯỚC 4]: THẢ RA HOÀN TOÀN
+                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0)
+                    if isPC then
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                    end
+
+                    if not fireproximityprompt then
+                        prompt:InputHoldEnd()
+                    end
+                    print("[Sequence " .. sequenceNumber .. "] Đã hoàn thành và nhả phím.")
                 end
 
-                -- [BƯỚC 2]: BẮT ĐẦU ĐÈ GIỮ (HOLD) CHẶT NGAY SAU ĐÓ
-                print("[Pipeline] Bắt đầu đè giữ chặt nút kích hoạt...")
-                VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
-                if isPC then
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                end
+                -- ====== CHẠY LẦN 1 ======
+                executeInteractionSequence(1)
+                
+                -- Nghỉ ngắn 0.5 giây giữa 2 lượt tương tác để game kịp nhận diện trạng thái mới
+                task.wait(0.5) 
 
-                -- Kích hoạt ProximityPrompt của game theo cơ chế gốc
-                if fireproximityprompt then
-                    fireproximityprompt(prompt)
-                else
-                    prompt:InputHoldBegin()
-                end
+                -- ====== CHẠY LẦN 2 (THÊM LẦN NỮA THEO YÊU CẦU) ======
+                executeInteractionSequence(2)
 
-                -- [BƯỚC 3]: DUY TRÌ TRẠNG THÁI GIỮ TRONG 11 GIÂY
-                task.wait(HOLD_DURATION)
-
-                -- [BƯỚC 4]: THẢ RA HOÀN TOÀN
-                VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0)
-                if isPC then
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                end
-
-                if not fireproximityprompt then
-                    prompt:InputHoldEnd()
-                end
-
-                -- Thông báo hoàn thành
                 StarterGui:SetCore("SendNotification", {
                     Title = "Interaction System",
-                    Text = "Đã sửa xong máy điện, chuẩn bị đổi phòng!",
+                    Text = "Đã hoàn thành 2 chu kỳ tương tác! Chuẩn bị đổi phòng.",
                     Duration = 3
                 })
-
-                print("[Pipeline] Loop complete and keys released successfully!")
                 interactionSuccess = true
             end
         end
@@ -302,9 +310,9 @@ end
 
 runPipeline()
 
--- Watchdog kiểm soát kẹt phòng
+-- Watchdog kiểm soát kẹt phòng (Tăng lên 90 giây vì chạy 2 chu kỳ mất khoảng 23-25 giây tổng cộng)
 task.spawn(function()
-    task.wait(60.0) 
+    task.wait(90.0) 
     local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
         and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
         and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
