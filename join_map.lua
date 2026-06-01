@@ -3,7 +3,7 @@ if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
-print("[🚀 AUTO LOBBY LOADER] Đang khởi chạy luồng tự động load vào màn chơi...");
+print("[🚀 AUTO LOBBY LOADER] Đang khởi chạy luồng tự động load vào màn chơi an toàn...");
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -11,19 +11,34 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
-local LobbyRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Lobby")
 
--- Hàm xử lý kích nổ sự kiện Click UI (Bypass trễ hoàn toàn trên Mobile)
+-- Kiểm tra thư mục Remotes an toàn để tránh lỗi nil
+local remotesFolder = ReplicatedStorage:WaitForChild("Remotes", 5)
+local LobbyRemotes = remotesFolder and remotesFolder:WaitForChild("Lobby", 5)
+
+if not LobbyRemotes then
+    warn("[❌] Không tìm thấy thư mục Remotes của phòng chờ!")
+    return false
+end
+
+-- Hàm click UI mô phỏng người dùng thật (Giảm thiểu việc bị quét từ getconnections)
 local function safeClick(button)
     if not button then return false end
-    if getconnections then
-        local clicked = false
-        for _, connection in pairs(getconnections(button.MouseButton1Click)) do connection:Fire() clicked = true end
-        for _, connection in pairs(getconnections(button.Activated)) do connection:Fire() clicked = true end
-        if clicked then return true end
+    
+    -- Ưu tiên click trực tiếp thông thường trước để an toàn
+    local success = pcall(function() 
+        button.MouseButton1Click:Fire() 
+    end)
+    
+    -- Nếu thất bại mới dùng tới phương thức nâng cao (nhưng giới hạn lại để tránh bị quét)
+    if not success and getconnections then
+        pcall(function()
+            for _, connection in pairs(getconnections(button.MouseButton1Click)) do 
+                connection:Fire() 
+            end
+        end)
     end
-    local success = pcall(function() button.MouseButton1Click:Fire() end)
-    return success
+    return true
 end
 
 -- =========================================================================
@@ -34,13 +49,11 @@ local targetHitbox = nil
 local selectedRoom = nil
 
 if lobbiesFolder then
-    -- Vòng lặp quét nhanh qua 10 phòng của sảnh chờ
     for i = 1, 10 do
         local lobby = lobbiesFolder:FindFirstChild(tostring(i))
         if lobby then
             local labelObj = lobby:FindFirstChildWhichIsA("TextLabel", true) or lobby:FindFirstChild("Status", true)
             
-            -- Kiểm tra nếu phòng hiển thị trạng thái trống (0 người hoặc "0/")
             if labelObj and (string.find(labelObj.Text, "0/") or string.find(labelObj.Text, "0 Players")) then
                 local hitbox = lobby:FindFirstChild("Hitbox") or lobby:FindFirstChildWhichIsA("BasePart")
                 if hitbox then
@@ -54,61 +67,63 @@ if lobbiesFolder then
 end
 
 -- =========================================================================
--- ⚡ BƯỚC 2: TIẾN HÀNH CHIẾM GIỮ PHÒNG VÀ KHÓA PHÒNG 1 NGƯỜI (SOLO BYPASS)
+-- ⚡ BƯỚC 2: TIẾN HÀNH CHIẾM GIỮ PHÒNG VÀ KHÓA PHÒNG MÔ PHỎNG NGƯỜI THẬT
 -- =========================================================================
 if targetHitbox then
-    print("[💎] Tìm thấy phòng trống số " .. selectedRoom .. "! Tiến hành chiếm giữ phòng...")
+    print("[💎] Tìm thấy phòng trống số " .. selectedRoom .. "! Đang tiến hành vào phòng...")
     
     local char = localPlayer.Character
     local rootPart = char and char:FindFirstChild("HumanoidRootPart")
     
     if rootPart then
-        -- Dịch chuyển tức thời nhân vật chạm vào Hitbox sảnh chờ để kích hoạt sự kiện Join phòng vật lý
-        rootPart.CFrame = targetHitbox.CFrame
-        task.wait(0.3) -- Chờ tín hiệu phản hồi mạng đồng bộ
+        -- Thay vì dịch chuyển tức thời ngay tâm, dịch chuyển cách một chút rồi chờ để Server đồng bộ vị trí hợp lệ
+        rootPart.CFrame = targetHitbox.CFrame + Vector3.new(0, 2, 0)
+        task.wait(0.8) -- Tăng thời gian chờ lên 0.8s để bypass Anti-Cheat kiểm tra vị trí (Ping)
     end
     
-    -- Gửi Remote yêu cầu tạo Party sảnh chờ độc lập
-    pcall(function()
+    -- Gửi Remote tạo Party ngắt quãng
+    print("[⚙️] Đang gửi yêu cầu tạo Party...")
+    local successCreate = pcall(function()
         LobbyRemotes.CreateParty:InvokeServer()
     end)
     
-    task.wait(1.2) -- Chờ UI phòng "CreateParty" xuất hiện hoàn chỉnh trên màn hình
+    task.wait(1.5) -- Tăng thời gian chờ lên 1.5s để UI và Server tải hoàn tất dữ liệu phòng mới
     
-    -- ÉP BUỘC SERVER: Thay đổi kích thước phòng tối đa xuống 1 người (Ngăn chặn người khác nhảy vào ké)
-    print("[⚙️] Đang ép Server hạ giới hạn phòng xuống 1 người để khóa Solo...")
+    -- Thay đổi kích thước phòng đơn an toàn
+    print("[⚙️] Đang đặt giới hạn phòng về 1 người...")
     pcall(function()
         LobbyRemotes.SetPartySize:InvokeServer(1)
     end)
     
-    task.wait(0.5) -- Đợi dữ liệu máy chủ cập nhật trạng thái giới hạn phòng thành 1/1
+    task.wait(1.0) -- Chờ 1 giây để tránh việc gửi lệnh nạp map quá dồn dập
     
     -- Định vị nút bấm "Create" trên giao diện UI để tải map
     local createButton = playerGui:FindFirstChild("Main") 
         and playerGui.Main:FindFirstChild("CreateParty") 
         and playerGui.Main.CreateParty:FindFirstChild("Create")
     
-    if createButton then
-        print("[🔥] Khóa phòng đơn thành công! Đang nhấn nút khởi động nạp map...")
+    if createButton and createButton.Visible then
+        print("[🔥] Khóa phòng đơn thành công! Đang kích hoạt nạp map qua giao diện...")
         safeClick(createButton)
     else
-        -- Cơ chế dự phòng: Nếu giao diện UI bị ẩn hoặc lỗi không thấy nút, cưỡng chế gọi Server tự load map bằng Remote
-        print("[⚠️] Không thấy nút giao diện UI, gửi Remote cưỡng chế chạy màn chơi đơn từ xa...")
+        -- Cơ chế dự phòng an toàn, thêm khoảng trễ lớn để không bị kick vì spam remote
+        print("[⚠️] Giao diện không phản hồi, gửi lệnh nạp map dự phòng bằng Remote...")
+        task.wait(0.5)
         pcall(function()
             LobbyRemotes.JoinLobby:InvokeServer("")
         end)
     end
 else
     -- =========================================================================
-    -- 🚨 CƠ CHẾ DỰ PHÒNG: TỰ TẠO PHÒNG CÁCH LY KHI SẢNH CHỜ KHÔNG CÓ Ô TRỐNG
+    -- 🚨 CƠ CHẾ DỰ PHÒNG: TỰ TẠO PHÒNG CÁCH LY KHI SẢNH CHỜ KÍN KHÔNG CÓ Ô TRỐNG
     -- =========================================================================
-    warn("[⚠️] Toàn bộ sảnh chờ đều kín phòng! Đang kích hoạt giao thức tạo phòng đơn cách ly khẩn cấp...")
+    warn("[⚠️] Toàn bộ sảnh chờ đều kín phòng! Kích hoạt giao thức tạo phòng đơn cách ly với độ trễ an toàn...")
     
     pcall(function()
         LobbyRemotes.CreateParty:InvokeServer()
-        task.wait(0.5)
+        task.wait(1.2)
         LobbyRemotes.SetPartySize:InvokeServer(1)
-        task.wait(0.5)
+        task.wait(1.2)
         LobbyRemotes.JoinLobby:InvokeServer("")
     end)
 end
