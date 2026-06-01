@@ -1,4 +1,4 @@
--- Chờ trò chơi tải xong hoàn toàn
+-- Chờ trò chơi tải xong hoàn toànt
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
