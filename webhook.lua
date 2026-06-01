@@ -1,6 +1,10 @@
--- =========================================================================
--- 🚀 DISCORD WEBHOOK LOG - CHỈ GỬI ĐÚNG 1 LẦN DUY NHẤT (ANTI-SPAM)
--- =========================================================================
+--[[
+    ╔═════════════════════════════════════════════════════════════════╗
+        TINHUB PROJECT - AUTOMATED GEM LOGGING SYSTEM (ANTI-SPAM)
+        * Original Credits: Developed by TheAnonymous (RScript)
+        * Modified & Updated: Managed under TinHub Cloud Ecosystem
+    ╚═════════════════════════════════════════════════════════════════╝
+--]]
 
 -- Sử dụng biến toàn cục để kiểm tra xem script này đã từng chạy trong server này chưa
 if _G.Webhook_Already_Sent then 
@@ -8,8 +12,10 @@ if _G.Webhook_Already_Sent then
     return 
 end
 
-local request = http_request or request or syn.request
-if request then
+-- Tìm hàm gửi Request tương thích với MỌI loại Executor (PC + Mobile)
+local requestFunc = json or request or (syn and syn.request) or (http and http.request) or http_request
+
+if requestFunc then
     task.spawn(function()
         local players = game:GetService("Players")
         local localPlayer = players.LocalPlayer
@@ -53,12 +59,10 @@ if request then
                 ["color"] = 65430, -- Màu xanh Neon
                 ["fields"] = {
                     {
-    ["name"] = "👤 Tên nhân vật:",
-    -- Thêm || ở đầu và cuối để tạo hiệu ứng ẩn chữ trên Discord
-    ["value"] = "||`" .. localPlayer.Name .. "`||",
-    ["inline"] = true
-},
-
+                        ["name"] = "👤 Tên nhân vật:",
+                        ["value"] = "||`" .. localPlayer.Name .. "`||",
+                        ["inline"] = true
+                    },
                     {
                         ["name"] = "💎 Số lượng Gem hiện tại:",
                         ["value"] = "**" .. tostring(currentGem) .. "**",
@@ -71,23 +75,32 @@ if request then
                     }
                 },
                 ["footer"] = {
-                    ["text"] = "Hệ thống vận hành tự động"
+                    ["text"] = "TinHub Project Engine • Hệ thống tự động"
                 },
                 ["timestamp"] = DateTime.now():ToIsoDate()
             }}
         }
 
+        -- Lấy link webhook truyền từ bên ngoài vào
+        local TargetWebhook = _G.Webhook
+        if not TargetWebhook or TargetWebhook == "" or TargetWebhook == "ĐIỀN_LINK_WEBHOOK_DISCORD_TẠI_ĐÂY" then
+            warn("[TinHub Webhook] Không tìm thấy Link Webhook hợp lệ ở _G.Webhook!")
+            return
+        end
+
         -- Đánh dấu trạng thái ĐÃ GỬI ngay lập tức trước khi request thực hiện xong (Khóa luồng)
         _G.Webhook_Already_Sent = true
 
         pcall(function()
-            request({
-                Url = _G.Customer_Webhook,
+            requestFunc({
+                Url = TargetWebhook,
                 Method = "POST",
                 Headers = {["content-type"] = "application/json"},
                 Body = game:GetService("HttpService"):JSONEncode(payload)
             })
-            print("[🚀 SYSTEM] Webhook chuan da keu thanh cong (Duy nhat 1 lan)!")
+            print("[🚀 SYSTEM] Webhook bao cao Gem da gui thanh cong!")
         end)
     end)
+else
+    warn("[TinHub Webhook] Executor này không hỗ trợ bất kỳ hàm gửi Request nào!")
 end
