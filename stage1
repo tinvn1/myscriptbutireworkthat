@@ -1,0 +1,85 @@
+-- ==========================================
+-- GIAI ĐOẠN 1: KHỞI TẠO & BẢO MẬT HỆ THỐNG
+-- ==========================================
+print("[PHASE 1] Dang khoi tao he thong an toan...")
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local ContentProvider = game:GetService("ContentProvider")
+while ContentProvider.RequestQueueSize > 0 do
+    task.wait(0.5)
+end
+
+print("Game da tai xong. Cho dong bo ping...")
+task.wait(6.0) 
+print("Bat dau kich hoat Engine bao mat.")
+
+-- SERVICES
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local PermanentNoclipEnabled = true
+
+-- HỆ THỐNG PHÁT HIỆN NGƯỜI CHƠI KHẨN CẤP (ANTI-MOD/PLAYER)
+local function evacuateServer(reason)
+    warn("[CRITICAL EVACUATION]: " .. reason)
+    task.spawn(function()
+        local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+            and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
+            and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
+
+        if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
+            pcall(function() PlayAgainRemote:FireServer() end)
+            print("DANG THOAT PHONG BANG CACH PLAY AGAIN...")
+            task.wait(1.0)
+        end
+        LocalPlayer:Kick("[WARNING] PHAT HIEN NGUOI CHOI KHAC TRONG PHONG!")
+    end)
+    error("Dung script de bao ve tai khoan.")
+end
+
+-- Kiem tra phong ban dau
+if #Players:GetPlayers() > 1 then
+    evacuateServer("Phong da co nguoi tu truoc!")
+end
+
+-- Theo doi neu co nguoi bat ngo vao phong
+Players.PlayerAdded:Connect(function(newPlayer)
+    if newPlayer ~= LocalPlayer then
+        evacuateServer("Co nguoi vao phong: " .. newPlayer.Name)
+    end
+end)
+
+-- ENGINE NOCLIP VINH VIEN (CHONG KET DI CHUYEN)
+local function StartPermanentNoclip()
+    local noclipConnection = nil
+    local function ConnectNoclip()
+        if noclipConnection then noclipConnection:Disconnect() end
+        noclipConnection = RunService.Stepped:Connect(function()
+            if not PermanentNoclipEnabled then return end
+            local character = LocalPlayer.Character
+            if character then
+                for _, child in ipairs(character:GetDescendants()) do
+                    if child:IsA("BasePart") and child.CanCollide then
+                        child.CanCollide = false
+                    end
+                end
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
+            end
+        end)
+    end
+    ConnectNoclip()
+    LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.1)
+        ConnectNoclip()
+    end)
+end
+
+StartPermanentNoclip()
+print("[PHASE 1 HOAN THANH] He thong an toan va Noclip da san sang!")
