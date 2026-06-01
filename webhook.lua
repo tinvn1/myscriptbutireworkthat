@@ -1,58 +1,93 @@
-print("[TinHub Webhook] Đang khởi tạo hệ thống báo cáo...")
+-- =========================================================================
+-- 🚀 DISCORD WEBHOOK LOG - CHỈ GỬI ĐÚNG 1 LẦN DUY NHẤT (ANTI-SPAM)
+-- =========================================================================
 
-local HttpService = game:GetService("HttpService")
-local LocalPlayer = game:GetService("Players").LocalPlayer
-
--- Tìm hàm gửi Request tương thích với MỌI loại Executor (PC + Mobile)
-local requestFunc = json or request or (syn and syn.request) or (http and http.request) or http_request
-
-_G.SendTinHubLog = function(statusType, details)
-    -- Lấy link webhook truyền từ loadstring ra, nếu trống thì dừng luôn
-    local TargetWebhook = _G.Webhook
-    if not TargetWebhook or TargetWebhook == "" or TargetWebhook == "ĐIỀN_LINK_WEBHOOK_DISCORD_CỦA_BẠN_TẠI_ĐÂY" then
-        warn("[TinHub Webhook] Không tìm thấy Link Webhook hợp lệ ở _G.Webhook!")
-        return
-    end
-
-    local title = "🚀 TRẠNG THÁI FARM"
-    local color = 65280 -- Màu xanh lá mặc định
-
-    if statusType == "Success" then
-        title = "⚡ KÍCH HOẠT POWER BOX THÀNH CÔNG"
-        color = 16776960
-    elseif statusType == "Evacuate" then
-        title = "🚨 THOÁT PHÒNG KHẨN CẤP"
-        color = 16711680
-    end
-
-    local data = {
-        ["embeds"] = {{
-            ["title"] = title,
-            ["description"] = details or "Tài khoản đang bắt đầu tiến trình chạy xuyên tường.",
-            ["color"] = color,
-            ["footer"] = { ["text"] = "TinHub Project • " .. os.date("%X") },
-            ["fields"] = {
-                { ["name"] = "Tài khoản:", ["value"] = "||" .. LocalPlayer.Name .. "||", ["inline"] = true },
-                { ["name"] = "JobId:", ["value"] = game.JobId ~= "" and "`" .. game.JobId .. "`" or "`Solo`", ["inline"] = true }
-            }
-        }}
-    }
-
-    -- Tiến hành gửi dữ liệu lên Discord
-    task.spawn(function()
-        if requestFunc then
-            pcall(requestFunc, {
-                Url = TargetWebhook,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = HttpService:JSONEncode(data)
-            })
-        else
-            warn("[TinHub Webhook] Executor này không hỗ trợ bất kỳ hàm gửi Request nào!")
-        end
-    end)
+-- Sử dụng biến toàn cục để kiểm tra xem script này đã từng chạy trong server này chưa
+if _G.Webhook_Already_Sent then 
+    print("[WEBHOOK] He thong da gui thong bao truoc do. Bo qua de tranh spam!")
+    return 
 end
 
--- Tự động gửi thông báo test trận đầu khi vừa nạp xong file
-task.wait(1.0)
-_G.SendTinHubLog("Start", "Đã kết nối dữ liệu đám mây thành công!")
+local request = http_request or request or syn.request
+if request then
+    task.spawn(function()
+        local players = game:GetService("Players")
+        local localPlayer = players.LocalPlayer
+        
+        while not localPlayer do
+            task.wait(0.5)
+            localPlayer = players.LocalPlayer
+        end
+        
+        -- Chờ PlayerGui xuất hiện ổn định
+        local playerGui = localPlayer:WaitForChild("PlayerGui", 20)
+        if not playerGui then return end
+
+        -- Tìm và đợi giao diện MainUI hiển thị số lượng Gem
+        local mainUI = playerGui:WaitForChild("MainUI", 20)
+        local gemCount = nil
+        
+        if mainUI then
+            gemCount = mainUI:FindFirstChild("GemDisplay") and mainUI.GemDisplay:FindFirstChild("Count")
+            local timeout = 0
+            while not gemCount and timeout < 10 do
+                pcall(function()
+                    gemCount = playerGui.MainUI.GemDisplay.Count
+                end)
+                if gemCount then break end
+                task.wait(0.5)
+                timeout = timeout + 0.5
+            end
+        end
+
+        -- Lấy văn bản Gem hiển thị thực tế trên màn hình
+        local currentGem = "0"
+        if gemCount then
+            currentGem = gemCount.Text
+        end
+
+        -- Khởi tạo cấu trúc Embed gửi Discord chỉn chu
+        local payload = {
+            ["embeds"] = {{
+                ["title"] = "💎 THÔNG BÁO SỐ LƯỢNG GEM 💎",
+                ["color"] = 65430, -- Màu xanh Neon
+                ["fields"] = {
+                    {
+    ["name"] = "👤 Tên nhân vật:",
+    -- Thêm || ở đầu và cuối để tạo hiệu ứng ẩn chữ trên Discord
+    ["value"] = "||`" .. localPlayer.Name .. "`||",
+    ["inline"] = true
+},
+
+                    {
+                        ["name"] = "💎 Số lượng Gem hiện tại:",
+                        ["value"] = "**" .. tostring(currentGem) .. "**",
+                        ["inline"] = true
+                    },
+                    {
+                        ["name"] = "🎮 Game ID:",
+                        ["value"] = "||`" .. tostring(game.PlaceId) .. "`||",
+                        ["inline"] = true
+                    }
+                },
+                ["footer"] = {
+                    ["text"] = "Hệ thống vận hành tự động"
+                },
+                ["timestamp"] = DateTime.now():ToIsoDate()
+            }}
+        }
+
+        -- Đánh dấu trạng thái ĐÃ GỬI ngay lập tức trước khi request thực hiện xong (Khóa luồng)
+        _G.Webhook_Already_Sent = true
+
+        pcall(function()
+            request({
+                Url = _G.Customer_Webhook,
+                Method = "POST",
+                Headers = {["content-type"] = "application/json"},
+                Body = game:GetService("HttpService"):JSONEncode(payload)
+            })
+            print("[🚀 SYSTEM] Webhook chuan da keu thanh cong (Duy nhat 1 lan)!")
+        end)
+    end)
+end
