@@ -1,9 +1,15 @@
+--[[
+    ╔═════════════════════════════════════════════════════════════════╗
+        TINHUB PROJECT - AUTOMATED GEM WATCHDOG SYSTEM (GLOBAL ED.)
+        * Pure Standalone Version - No Script Integration Required
+        * Designed for Global Users & International Communities
+    ╚═════════════════════════════════════════════════════════════════╝
+--]]
 
--- Reset trạng thái biến kích hoạt khi sang server mới
-_G.StartGemCheck = false
+-- Reset environmental markers for the new session
 _G.Webhook_Already_Sent = nil
 
-print("Loading via TinHub Engine [Post-Interaction Check]")
+print("[TinHub Engine] Initializing Pure Gem Watchdog...")
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -14,16 +20,16 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
--- --- CONFIGURATION & REFERENCES ---
+-- --- CONFIGURATION & GLOBAL UTILITIES ---
 local requestFunc = json or request or (syn and syn.request) or (http and http.request) or http_request
 
--- Hàm chuyển đổi text Gem sang dạng số để so sánh
+-- Extracts numeric values cleanly from GUI text strings
 local function parseGemCount(gemStr)
     local cleaned = string.gsub(gemStr, "[^%d]", "") 
     return tonumber(cleaned) or 0
 end
 
--- Lấy Object chứa Text Gem hiện tại trên MainUI
+-- Locates the core Gem Text Object within the game interface
 local function getGemCountInstance()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if playerGui then
@@ -35,23 +41,24 @@ local function getGemCountInstance()
     return nil
 end
 
--- --- HỆ THỐNG GỬI WEBHOOK PHÂN LOẠI TRẠNG THÁI ---
+-- --- GLOBAL DISCORD EMBED TRANSMITTER (ENGLISH ONLY) ---
 local function sendStatusWebhook(isSuccess, currentGemText)
     if _G.Webhook_Already_Sent then 
-        print("[WEBHOOK] Hệ thống đã gửi thông báo trước đó. Bỏ qua để tránh spam!")
+        print("[WEBHOOK] Notification already dispatched for this session. Skipping to prevent spam.")
         return 
     end
     _G.Webhook_Already_Sent = true
 
     local TargetWebhook = _G.Webhook
     if not requestFunc or not TargetWebhook or TargetWebhook == "" or TargetWebhook == "ĐIỀN_LINK_WEBHOOK_DISCORD_TẠI_ĐÂY" then
-        warn("[TinHub Webhook] Link Webhook không hợp lệ hoặc không hỗ trợ gửi Request!")
+        warn("[TinHub Webhook] Invalid Webhook URL configuration or Executor lack of HTTP Request support!")
         return
     end
 
+    -- Configure interface structure based on verification status
     local title = isSuccess and "🟩 GEM UP SUCCESSFUL 🟩" or "🟥 GEM NOT UP ERROR 🟥"
-    local color = isSuccess and 65280 or 16711680 
-    local statusDetail = isSuccess and "**Thành công! Số lượng Gem đã tăng lên sau khi sửa máy.**" or "**[ERROR] Máy đã sửa nhưng Gem không tăng!**"
+    local color = isSuccess and 65280 or 16711680 -- 65280: Emerald Green | 16711680: Crimson Red
+    local statusDetail = isSuccess and "**Success! The account balance has increased cleanly.**" or "**[ERROR] Server rotation initiated without data update!**"
 
     local payload = {
         ["embeds"] = {{
@@ -59,28 +66,28 @@ local function sendStatusWebhook(isSuccess, currentGemText)
             ["color"] = color,
             ["fields"] = {
                 {
-                    ["name"] = "👤 Tên nhân vật:",
+                    ["name"] = "👤 Account Username:",
                     ["value"] = "||`" .. LocalPlayer.Name .. "`||",
                     ["inline"] = true
                 },
                 {
-                    ["name"] = "💎 Số lượng Gem hiện tại:",
+                    ["name"] = "💎 Current Gem Balance:",
                     ["value"] = "**" .. tostring(currentGemText) .. "**",
                     ["inline"] = true
                 },
                 {
-                    ["name"] = "📊 Trạng thái hệ thống:",
+                    ["name"] = "📊 Watchdog System Status:",
                     ["value"] = statusDetail,
                     ["inline"] = false
                 },
                 {
-                    ["name"] = "🎮 Game ID:",
+                    ["name"] = "🎮 Execution Place ID:",
                     ["value"] = "||`" .. tostring(game.PlaceId) .. "`||",
                     ["inline"] = true
                 }
             },
             ["footer"] = {
-                ["text"] = "TinHub Project Engine • Kiểm tra trạng thái tự động"
+                ["text"] = "TinHub Project Engine • Automated Integrity Verification"
             },
             ["timestamp"] = DateTime.now():ToIsoDate()
         }}
@@ -93,79 +100,81 @@ local function sendStatusWebhook(isSuccess, currentGemText)
             Headers = {["content-type"] = "application/json"},
             Body = HttpService:JSONEncode(payload)
         })
-        print("[🚀 SYSTEM] Webhook báo cáo trạng thái kiểm tra Gem đã được phát đi!")
+        print("[🚀 SYSTEM] Webhook status payload successfully broadcasted!")
     end)
 end
 
--- --- MAIN PIPELINE MONITOR ---
+-- --- STANDALONE AUTOMATED MONITOR ---
 local function startWatchdog()
     if not requestFunc then
-        warn("[TinHub Webhook] Executor không hỗ trợ gửi Request!")
+        warn("[TinHub Webhook] Critical: Executor lacks HTTP request execution capability.")
         return
     end
 
+    -- Phase 1: Wait for UI rendering completion
     local gemCountInst = getGemCountInstance()
-    while not gemCountInst do
+    local bootTimeout = 0
+    while not gemCountInst and bootTimeout < 15 do
         task.wait(0.5)
         gemCountInst = getGemCountInstance()
+        bootTimeout = bootTimeout + 0.5
     end
 
-    -- Ghi nhớ số lượng Gem GỐC ngay lúc này (trước khi sửa máy xong)
+    if not gemCountInst then
+        warn("[System Error] Failed to hook into the UI Gem Tracking Node.")
+        return
+    end
+
+    -- Ghi nhớ giá trị ban đầu khi vừa đặt chân vào server
     local initialGemValue = parseGemCount(gemCountInst.Text)
-    print("[Dữ liệu] Đã ghi nhớ số Gem nền ban đầu: " .. tostring(initialGemValue))
+    print("[Watchdog Data] Base value registered: " .. tostring(initialGemValue))
 
-    -- [QUAN TRỌNG] Vòng lặp chờ tín hiệu "Đã sửa máy xong" từ script Farm truyền qua
-    print("[Watchdog] Đang đứng im chế độ nền chờ bạn sửa máy...")
-    while not _G.StartGemCheck do
-        task.wait(0.05) -- Quét cực nhanh với delay thấp để không bỏ lỡ khoảnh khắc bấm nút
-    end
+    local statusTriggered = false
 
-    -- Cập nhật lại mốc chính xác ngay khi vừa tương tác xong
-    initialGemValue = parseGemCount(gemCountInst.Text)
-    print("[Watchdog] Đã nhận tín hiệu sửa máy! Bắt đầu kích hoạt 8 giây check tăng Gem...")
-
-    local scanTime = 0
-    local maxWaitTime = 8.0 -- Giảm xuống 8 giây vì máy đã sửa xong, Gem bắt buộc phải nhảy số ngay lập tức
-    local hasTriggered = false
-
-    -- Cơ chế kết hợp lắng nghe thuộc tính thay đổi để đẩy tốc độ lên tối đa
-    local connection
-    connection = gemCountInst:GetPropertyChangedSignal("Text"):Connect(function()
-        local currentGemValue = parseGemCount(gemCountInst.Text)
-        if currentGemValue > initialGemValue and not hasTriggered then
-            hasTriggered = true
-            if connection then connection:Disconnect() end
+    -- CORE ENGINE 1: Real-time Property Signal Interceptor (Instantaneous Update Detection)
+    local propertyConnection
+    propertyConnection = gemCountInst:GetPropertyChangedSignal("Text"):Connect(function()
+        local realTimeValue = parseGemCount(gemCountInst.Text)
+        if realTimeValue > initialGemValue and not statusTriggered then
+            statusTriggered = true
+            if propertyConnection then propertyConnection:Disconnect() end
             sendStatusWebhook(true, gemCountInst.Text)
         end
     end)
 
-    -- Vòng lặp quét bảo hiểm dự phòng
-    while scanTime < maxWaitTime and not hasTriggered do
-        task.wait(0.1)
-        scanTime = scanTime + 0.1
-
-        if gemCountInst and gemCountInst.Parent then
-            local currentGemValue = parseGemCount(gemCountInst.Text)
-            if currentGemValue > initialGemValue and not hasTriggered then
-                hasTriggered = true
-                if connection then connection:Disconnect() end
-                sendStatusWebhook(true, gemCountInst.Text)
-                break
+    -- CORE ENGINE 2: Thread Destruction / Room Disconnection Listener (The Error Trigger)
+    -- Khi nhân vật bị xóa để đổi server, nếu statusTriggered vẫn chưa là true -> Nghĩa là đổi phòng mà không lên Gem
+    LocalPlayer.CharacterRemoving:Connect(function()
+        task.wait(0.1) -- Small physics delay to let final engine packets complete
+        if not statusTriggered then
+            statusTriggered = true
+            if propertyConnection then propertyConnection:Disconnect() end
+            
+            local finalVerificationText = gemCountInst and gemCountInst.Text or tostring(initialGemValue)
+            local finalVerificationValue = parseGemCount(finalVerificationText)
+            
+            -- Phút chót cứu nguy: Check lại xem UI thực tế có tăng trước khi biến mất hoàn toàn không
+            if finalVerificationValue > initialGemValue then
+                sendStatusWebhook(true, finalVerificationText)
+            else
+                print("[⚠️ ALERT] Character removed from current chamber without any balance changes.")
+                sendStatusWebhook(false, finalVerificationText)
             end
-        else
-            gemCountInst = getGemCountInstance()
         end
-    end
-
-    -- Trường hợp quá thời gian (8 giây) sau khi bấm nút sửa máy mà Gem vẫn không nhảy số
-    if not hasTriggered then
-        hasTriggered = true
-        if connection then connection:Disconnect() end
-        
-        local finalGemText = gemCountInst and gemCountInst.Text or "0"
-        print("[⚠️ FAILED] LỖI THỰC SỰ: Đã bấm sửa máy nhưng quá 8 giây Gem không tăng!")
-        sendStatusWebhook(false, finalGemText)
-    end
+    end)
+    
+    -- CORE ENGINE 3: Safety Net Match Hard-Timeout (60 Seconds)
+    task.delay(60.0, function()
+        if not statusTriggered then
+            statusTriggered = true
+            if propertyConnection then propertyConnection:Disconnect() end
+            
+            gemCountInst = getGemCountInstance()
+            local finalText = gemCountInst and gemCountInst.Text or "0"
+            print("[⚠️ ALERT] Match deadline exceeded with stagnant stats.")
+            sendStatusWebhook(false, finalText)
+        end
+    end)
 end
 
 startWatchdog()
