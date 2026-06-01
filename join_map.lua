@@ -3,129 +3,141 @@ if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
-print("[🚀 AUTO LOBBY LOADER] Đang khởi chạy luồng tự động load vào màn chơi an toàn...");
+print("[🎮 SYSTEM] Khởi chạy luồng giả lập click theo tọa độ màn hình (Chống bấm nhầm Leave)...");
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GuiService = game:GetService("GuiService") 
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
 
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
+local LobbyRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Lobby")
 
--- Kiểm tra thư mục Remotes an toàn để tránh lỗi nil
-local remotesFolder = ReplicatedStorage:WaitForChild("Remotes", 5)
-local LobbyRemotes = remotesFolder and remotesFolder:WaitForChild("Lobby", 5)
+-- Đảm bảo tắt mọi trạng thái UI Navigation cũ tránh xung đột tiêu điểm vàng
+GuiService.SelectedObject = nil
 
-if not LobbyRemotes then
-    warn("[❌] Không tìm thấy thư mục Remotes của phòng chờ!")
-    return false
-end
-
--- Hàm click UI mô phỏng người dùng thật (Giảm thiểu việc bị quét từ getconnections)
-local function safeClick(button)
-    if not button then return false end
+-- Hàm giả lập click chuột trái vào tọa độ chính xác của nút trên màn hình (Bypass UI Navigation hoàn toàn)
+local function clickGuiObject(guiObject)
+    if not guiObject or not guiObject:IsA("GuiObject") then return false end
     
-    -- Ưu tiên click trực tiếp thông thường trước để an toàn
-    local success = pcall(function() 
-        button.MouseButton1Click:Fire() 
-    end)
+    -- Lấy vị trí trung tâm thực tế của nút trên màn hình (tính bằng pixel)
+    local posX = guiObject.AbsolutePosition.X + (guiObject.AbsoluteSize.X / 2)
+    local posY = guiObject.AbsolutePosition.Y + (guiObject.AbsoluteSize.Y / 2) + 36 -- +36 topbar offset của Roblox
     
-    -- Nếu thất bại mới dùng tới phương thức nâng cao (nhưng giới hạn lại để tránh bị quét)
-    if not success and getconnections then
-        pcall(function()
-            for _, connection in pairs(getconnections(button.MouseButton1Click)) do 
-                connection:Fire() 
-            end
-        end)
-    end
+    -- Giả lập di chuột tới và click trái
+    VirtualInputManager:SendMouseButtonEvent(posX, posY, 0, true, game, 1) -- Nhấn chuột xuống
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(posX, posY, 0, false, game, 1) -- Thả chuột ra
     return true
 end
 
 -- =========================================================================
--- 🏃 BƯỚC 1: TÌM Ô HOÀN TOÀN TRỐNG (0 NGƯỜI) ĐỂ CHIẾM PHÒNG SOLO
+-- BƯỚC 1: QUÉT SẢNH VÀ ĐẾM SỐ PHÒNG ĐÃ CÓ NGƯỜI
 -- =========================================================================
 local lobbiesFolder = Workspace:FindFirstChild("Lobbies")
 local targetHitbox = nil
-local selectedRoom = nil
+local occupiedRoomsCount = 0 
 
 if lobbiesFolder then
     for i = 1, 10 do
         local lobby = lobbiesFolder:FindFirstChild(tostring(i))
         if lobby then
             local labelObj = lobby:FindFirstChildWhichIsA("TextLabel", true) or lobby:FindFirstChild("Status", true)
-            
-            if labelObj and (string.find(labelObj.Text, "0/") or string.find(labelObj.Text, "0 Players")) then
-                local hitbox = lobby:FindFirstChild("Hitbox") or lobby:FindFirstChildWhichIsA("BasePart")
-                if hitbox then
-                    targetHitbox = hitbox
-                    selectedRoom = i
-                    break
+            if labelObj then
+                if not (string.find(labelObj.Text, "0/") or string.find(labelObj.Text, "0 Players")) then
+                    occupiedRoomsCount = occupiedRoomsCount + 1
+                else
+                    if not targetHitbox then
+                        local hitbox = lobby:FindFirstChild("Hitbox") or lobby:FindFirstChildWhichIsA("BasePart")
+                        if hitbox then
+                            targetHitbox = hitbox
+                        end
+                    end
                 end
             end
         end
     end
 end
 
+print("[📊 SYSTEM] Số lượng phòng đã có người ở sảnh này: " .. occupiedRoomsCount)
+
+-- Nếu từ 3 phòng trở lên đã có người, tự động đổi Server
+if occupiedRoomsCount >= 3 then
+    warn("[🚨 WARNING] Sảnh đông. Tiến hành chuyển Server!")
+    pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        local response = game:HttpGet(url)
+        local data = HttpService:JSONDecode(response)
+        if data and data.data then
+            for _, server in pairs(data.data) do
+                if server.id ~= game.JobId and server.playing and server.playing < server.maxPlayers then
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, localPlayer)
+                    return false
+                end
+            end
+        end
+        TeleportService:Teleport(game.PlaceId, localPlayer)
+    end)
+    return false
+end
+
 -- =========================================================================
--- ⚡ BƯỚC 2: TIẾN HÀNH CHIẾM GIỮ PHÒNG VÀ KHÓA PHÒNG MÔ PHỎNG NGƯỜI THẬT
+-- BƯỚC 2: TỰ CHẠY ĐẾN Ô VÀ CLICK TỌA ĐỘ AN TOÀN
 -- =========================================================================
 if targetHitbox then
-    print("[💎] Tìm thấy phòng trống số " .. selectedRoom .. "! Đang tiến hành vào phòng...")
+    local char = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+    local humanoid = char:WaitForChild("Humanoid")
+    local rootPart = char:WaitForChild("HumanoidRootPart")
     
-    local char = localPlayer.Character
-    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-    
-    if rootPart then
-        -- Thay vì dịch chuyển tức thời ngay tâm, dịch chuyển cách một chút rồi chờ để Server đồng bộ vị trí hợp lệ
-        rootPart.CFrame = targetHitbox.CFrame + Vector3.new(0, 2, 0)
-        task.wait(0.8) -- Tăng thời gian chờ lên 0.8s để bypass Anti-Cheat kiểm tra vị trí (Ping)
+    humanoid:MoveTo(targetHitbox.Position)
+    local startTime = tick()
+    while (rootPart.Position - targetHitbox.Position).Magnitude > 4 do
+        task.wait(0.1)
+        if tick() - startTime > 8 then break end
     end
     
-    -- Gửi Remote tạo Party ngắt quãng
-    print("[⚙️] Đang gửi yêu cầu tạo Party...")
-    local successCreate = pcall(function()
+    task.wait(0.5) 
+    
+    pcall(function()
         LobbyRemotes.CreateParty:InvokeServer()
     end)
     
-    task.wait(1.5) -- Tăng thời gian chờ lên 1.5s để UI và Server tải hoàn tất dữ liệu phòng mới
+    task.wait(1.5) -- Đợi UI mở hẳn ra
+
+    local mainGui = playerGui:FindFirstChild("Main")
+    local createPartyWindow = mainGui and mainGui:FindFirstChild("CreateParty")
     
-    -- Thay đổi kích thước phòng đơn an toàn
-    print("[⚙️] Đang đặt giới hạn phòng về 1 người...")
-    pcall(function()
-        LobbyRemotes.SetPartySize:InvokeServer(1)
-    end)
-    
-    task.wait(1.0) -- Chờ 1 giây để tránh việc gửi lệnh nạp map quá dồn dập
-    
-    -- Định vị nút bấm "Create" trên giao diện UI để tải map
-    local createButton = playerGui:FindFirstChild("Main") 
-        and playerGui.Main:FindFirstChild("CreateParty") 
-        and playerGui.Main.CreateParty:FindFirstChild("Create")
-    
-    if createButton and createButton.Visible then
-        print("[🔥] Khóa phòng đơn thành công! Đang kích hoạt nạp map qua giao diện...")
-        safeClick(createButton)
+    if createPartyWindow then
+        -- Tìm kiếm nút dựa trên tên/loại cấu trúc UI của bạn
+        local buttonOne = createPartyWindow:FindFirstChild("1") or createPartyWindow:FindFirstChildWhichIsA("GuiButton", true)
+        local createButton = createPartyWindow:FindFirstChild("Create") or createPartyWindow:FindFirstChild("Confirm", true)
+        
+        -- 1. Click chính xác vào nút số 1
+        if buttonOne and buttonOne.AbsoluteSize.X > 0 then
+            print("[🎯] Click tọa độ màn hình vào ô chọn số 1 người...");
+            clickGuiObject(buttonOne)
+            task.wait(0.5) -- Chờ UI cập nhật lựa chọn
+        else
+            warn("[❌] Không tìm thấy hoặc nút số 1 chưa hiển thị trên màn hình!")
+        end
+        
+        -- 2. Click chính xác vào nút Create
+        if createButton and createButton.AbsoluteSize.X > 0 then
+            print("[🎯] Click tọa độ màn hình vào nút Create...");
+            clickGuiObject(createButton)
+            print("[🔥] Đã kích hoạt nút Create thành công! Luồng bấm dừng lại tại đây.");
+        else
+            warn("[❌] Không tìm thấy hoặc nút Create chưa hiển thị trên màn hình!")
+        end
     else
-        -- Cơ chế dự phòng an toàn, thêm khoảng trễ lớn để không bị kick vì spam remote
-        print("[⚠️] Giao diện không phản hồi, gửi lệnh nạp map dự phòng bằng Remote...")
-        task.wait(0.5)
-        pcall(function()
-            LobbyRemotes.JoinLobby:InvokeServer("")
-        end)
+        warn("[❌] Không tìm thấy bảng giao diện CreateParty!")
     end
 else
-    -- =========================================================================
-    -- 🚨 CƠ CHẾ DỰ PHÒNG: TỰ TẠO PHÒNG CÁCH LY KHI SẢNH CHỜ KÍN KHÔNG CÓ Ô TRỐNG
-    -- =========================================================================
-    warn("[⚠️] Toàn bộ sảnh chờ đều kín phòng! Kích hoạt giao thức tạo phòng đơn cách ly với độ trễ an toàn...")
-    
-    pcall(function()
-        LobbyRemotes.CreateParty:InvokeServer()
-        task.wait(1.2)
-        LobbyRemotes.SetPartySize:InvokeServer(1)
-        task.wait(1.2)
-        LobbyRemotes.JoinLobby:InvokeServer("")
-    end)
+    warn("[⚠️] Sảnh đầy, đang tiến hành nhảy Server...")
 end
 
 return true
