@@ -121,5 +121,5 @@ local function interactWithClosestPowerBox()
     return interactionSuccess
 end
 
--- Chạy thử nghiệm cơ chế
+-- Chạy thử nghiệm cơ chế gốc
 interactWithClosestPowerBox()
