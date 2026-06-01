@@ -1,7 +1,7 @@
 -- Feel free to adjust
 -- Optimized Custom Mode: Pure Power Box Route (Using Original Crawl Mechanic)
 -- Original Author: TheAnonymous in RScript
--- Updated & Optimized by: TinHub Project + Auto Hold, Triple Tap/Press Integrated (Double Sequence)
+-- Updated & Optimized by: TinHub Project + Triple Tap/Press Only (No Hold) + Gem Watchdog
 
 print("Loading via TinHub Engine")
  
@@ -26,6 +26,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
+local HttpService = game:GetService("HttpService")
 local Camera = workspace.CurrentCamera
  
 -- --- CONFIGURATION & REFERENCES ---
@@ -34,7 +35,28 @@ local MapFolder = Workspace:FindFirstChild("Map")
 local PermanentNoclipEnabled = true
 
 local OFFSET_DOWN = 20     -- Độ thấp dưới tâm màn hình (pixel)
-local HOLD_DURATION = 11   -- Đã chỉnh thành 11 giây giữ máy
+
+-- BIẾN KIỂM SOÁT LUỒNG TOÀN CỤC KHẨN CẤP
+local forceStopInteraction = false
+local initialGemValue = 0
+
+-- Hàm chuyển đổi text Gem (Ví dụ: "1,250", "500") sang dạng số để so sánh
+local function parseGemCount(gemStr)
+    local cleaned = string.gsub(gemStr, "[^%d]", "") -- Lọc bỏ dấu phẩy hoặc ký tự lạ
+    return tonumber(cleaned) or 0
+end
+
+-- Lấy Object chứa Text Gem hiện tại
+local function getGemCountInstance()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        local mainUI = playerGui:FindFirstChild("MainUI")
+        if mainUI then
+            return mainUI:FindFirstChild("GemDisplay") and mainUI.GemDisplay:FindFirstChild("Count")
+        end
+    end
+    return nil
+end
  
 -- --- EMERGENCY DETECTION RADAR ---
 local function evacuateServer(reason)
@@ -159,9 +181,85 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
         task.wait(delayInterval)
     end
 end
+
+-- --- AUTOMATED GEM LOGGING & WATCHDOG SYSTEM ---
+local function startGemWatchdog()
+    task.spawn(function()
+        local gemCountInst = getGemCountInstance()
+        local timeout = 0
+        while not gemCountInst and timeout < 10 do
+            task.wait(0.5)
+            gemCountInst = getGemCountInstance()
+            timeout = timeout + 0.5
+        end
+
+        if gemCountInst then
+            initialGemValue = parseGemCount(gemCountInst.Text)
+            print("[Gem Watchdog] Khoi tao so luong Gem ban dau: " .. tostring(initialGemValue))
+
+            -- GỬI WEBHOOK BAN ĐẦU (ANTI-SPAM)
+            if not _G.Webhook_Already_Sent then
+                local requestFunc = json or request or (syn and syn.request) or (http and http.request) or http_request
+                local TargetWebhook = _G.Webhook
+
+                if requestFunc and TargetWebhook and TargetWebhook ~= "" and TargetWebhook ~= "ĐIỀN_LINK_WEBHOOK_DISCORD_TẠI_ĐÂY" then
+                    _G.Webhook_Already_Sent = true
+                    local payload = {
+                        ["embeds"] = {{
+                            ["title"] = "💎 THÔNG BÁO SỐ LƯỢNG GEM 💎",
+                            ["color"] = 65430,
+                            ["fields"] = {
+                                {["name"] = "👤 Tên nhân vật:", ["value"] = "||`" .. LocalPlayer.Name .. "`||", ["inline"] = true},
+                                {["name"] = "💎 Số lượng Gem hiện tại:", ["value"] = "**" .. gemCountInst.Text .. "**", ["inline"] = true},
+                                {["name"] = "🎮 Game ID:", ["value"] = "||`" .. tostring(game.PlaceId) .. "`||", ["inline"] = true}
+                            },
+                            ["footer"] = {["text"] = "TinHub Project Engine • Hệ thống tự động"},
+                            ["timestamp"] = DateTime.now():ToIsoDate()
+                        }}
+                    }
+                    pcall(function()
+                        requestFunc({
+                            Url = TargetWebhook,
+                            Method = "POST",
+                            Headers = {["content-type"] = "application/json"},
+                            Body = HttpService:JSONEncode(payload)
+                        })
+                        print("[🚀 SYSTEM] Webhook bao cao Gem da gui thanh cong!")
+                    end)
+                end
+            end
+
+            -- VÒNG LẶP KIỂM TRA TĂNG GEM ĐỂ VOTEPLAYAGAIN LẬP TỨC
+            while true do
+                task.wait(0.1)
+                if forceStopInteraction then break end
+                
+                local currentGemValue = parseGemCount(gemCountInst.Text)
+                if currentGemValue > initialGemValue then
+                    print("[🔥 CRITICAL] PHÁT HIỆN GEM TĂNG LÊN HOẶC THAY ĐỔI! LẬP TỨC ĐỔI SERVER")
+                    forceStopInteraction = true 
+                    
+                    local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+                        and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
+                        and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
+                    
+                    if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
+                        pcall(function()
+                            PlayAgainRemote:FireServer()
+                        end)
+                        print("[Watchdog Success] Da gui lenh VotePlayAgain khan cap khi nhan duoc Gem!")
+                    end
+                    break
+                end
+            end
+        end
+    end)
+end
  
 -- --- PIPELINE EXECUTION ENGINE ---
 local function runPipeline()
+    startGemWatchdog() -- Khởi chạy hệ thống quét Gem ngầm
+
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
  
@@ -199,89 +297,49 @@ local function runPipeline()
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
         task.wait(0.5)
  
-        -- 3. CƠ CHẾ NHẤP NHẢ 3 LẦN VÀ TỰ ĐỘNG GIỮ (PC & MOBILE ADAPTIVE)
+        -- 3. CHỈ THỰC HIỆN BẤM MÀN HÌNH HOẶC BẤM E 3 LẦN (CẮT BỎ HOÀN TOÀN CHU KỲ GIỮ)
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
-                
+                if forceStopInteraction then return end -- Ngắt nếu Gem nhảy sớm
+
                 local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
                 local centerX = Camera.ViewportSize.X / 2
                 local targetY = (Camera.ViewportSize.Y / 2) + OFFSET_DOWN
 
-                -- Hàm thực hiện toàn bộ quy trình Tương tác (Nhấp nhả 3 lần + Đè giữ 11 giây)
-                local function executeInteractionSequence(sequenceNumber)
-                    local noticeText = "Lần " .. sequenceNumber .. ": Đang chạm màn hình 3 lần và giữ máy..."
-                    if isPC then
-                        noticeText = "Lần " .. sequenceNumber .. ": Đang nhấp nhả phím [E] 3 lần và đè giữ..."
-                    end
-
-                    StarterGui:SetCore("SendNotification", {
-                        Title = "Interaction System",
-                        Text = noticeText,
-                        Duration = 3
-                    })
-
-                    -- [BƯỚC 1]: THỰC HIỆN NHẤP NHẢ 3 LẦN
-                    if isPC then
-                        print("[Sequence " .. sequenceNumber .. "] Nhấp nhả phím E 3 lần...")
-                        for i = 1, 3 do
-                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)  -- Nhấn E xuống
-                            task.wait(0.05)
-                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) -- Thả E ra
-                            task.wait(0.05)
-                        end
-                    else
-                        print("[Sequence " .. sequenceNumber .. "] Chạm màn hình 3 lần...")
-                        for i = 1, 3 do
-                            VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0) -- Chạm xuống
-                            task.wait(0.05)
-                            VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0) -- Nhấc lên
-                            task.wait(0.05)
-                        end
-                    end
-
-                    -- [BƯỚC 2]: BẮT ĐẦU ĐÈ GIỮ (HOLD) CHẶT
-                    print("[Sequence " .. sequenceNumber .. "] Đè giữ nút...")
-                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
-                    if isPC then
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                    end
-
-                    if fireproximityprompt then
-                        fireproximityprompt(prompt)
-                    else
-                        prompt:InputHoldBegin()
-                    end
-
-                    -- [BƯỚC 3]: DUY TRÌ TRẠNG THÁI GIỮ TRONG 11 GIÂY
-                    task.wait(HOLD_DURATION)
-
-                    -- [BƯỚC 4]: THẢ RA HOÀN TOÀN
-                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0)
-                    if isPC then
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                    end
-
-                    if not fireproximityprompt then
-                        prompt:InputHoldEnd()
-                    end
-                    print("[Sequence " .. sequenceNumber .. "] Đã hoàn thành và nhả phím.")
+                local noticeText = "Đang chạm màn hình nhanh 3 lần..."
+                if isPC then
+                    noticeText = "Đang gõ nhanh phím [E] 3 lần..."
                 end
-
-                -- ====== CHẠY LẦN 1 ======
-                executeInteractionSequence(1)
-                
-                -- Nghỉ ngắn 0.5 giây giữa 2 lượt tương tác để game kịp nhận diện trạng thái mới
-                task.wait(0.5) 
-
-                -- ====== CHẠY LẦN 2 (THÊM LẦN NỮA THEO YÊU CẦU) ======
-                executeInteractionSequence(2)
 
                 StarterGui:SetCore("SendNotification", {
                     Title = "Interaction System",
-                    Text = "Đã hoàn thành 2 chu kỳ tương tác! Chuẩn bị đổi phòng.",
-                    Duration = 3
+                    Text = noticeText,
+                    Duration = 2
                 })
+
+                -- THỰC HIỆN NHẤP NHẢ 3 LẦN NHANH (MÔ PHỎNG PHÍM/CHẠM MÀN HÌNH)
+                if isPC then
+                    print("[Pipeline] Phát hiện PC: Đang gõ phím E 3 lần...")
+                    for i = 1, 3 do
+                        if forceStopInteraction then return end
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                        task.wait(0.05)
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        task.wait(0.05)
+                    end
+                else
+                    print("[Pipeline] Phát hiện Mobile: Đang chạm màn hình 3 lần...")
+                    for i = 1, 3 do
+                        if forceStopInteraction then return end
+                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0)
+                        task.wait(0.05)
+                    end
+                end
+
+                print("[Pipeline] Đã gõ/chạm đủ 3 lần! Bỏ qua chu kỳ đè giữ.")
                 interactionSuccess = true
             end
         end
@@ -289,10 +347,9 @@ local function runPipeline()
         warn("[Warning] Không tìm thấy bất kỳ Power Box nào trên bản đồ này!")
     end
  
-    -- --- VOTE PLAY AGAIN SEQUENCE (TỰ ĐỘNG ĐỔI TRẬN) ---
-    task.wait(1.0) 
-    
-    if interactionSuccess then
+    -- --- VOTE PLAY AGAIN SEQUENCE (TỰ ĐỘNG ĐỔI TRẬN LẬP TỨC) ---
+    if not forceStopInteraction and interactionSuccess then
+        task.wait(0.2) -- Giảm thiểu thời gian chờ xuống mức tối đa để đổi phòng siêu tốc
         local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
             and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
             and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
@@ -301,18 +358,16 @@ local function runPipeline()
             pcall(function()
                 PlayAgainRemote:FireServer()
             end)
-            print("[Play Again] Đã gửi lệnh đổi server sau khi chờ thêm 1 giây.")
-        else
-            warn("[Warning] VotePlayAgain remote path could not be found.")
+            print("[Play Again] Đã gửi lệnh đổi server siêu tốc.")
         end
     end
 end
 
 runPipeline()
 
--- Watchdog kiểm soát kẹt phòng (Tăng lên 90 giây vì chạy 2 chu kỳ mất khoảng 23-25 giây tổng cộng)
+-- Watchdog kiểm soát kẹt phòng (Giảm xuống còn 35 giây vì script giờ kết thúc siêu tốc)
 task.spawn(function()
-    task.wait(90.0) 
+    task.wait(35.0) 
     local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
         and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
         and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
