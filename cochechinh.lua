@@ -1,7 +1,7 @@
 -- Feel free to adjust
 -- Optimized Custom Mode: Pure Power Box Route (Using Original Crawl Mechanic)
 -- Original Author: TheAnonymous in RScript
--- Updated & Optimized by: TinHub Project + Auto Hold Integrated
+-- Updated & Optimized by: TinHub Project + Auto Hold & Triple Tap Integrated
 
 print("Loading via TinHub Engine")
  
@@ -175,7 +175,6 @@ local function runPipeline()
     if MapFolder and MapFolder:FindFirstChild("Tiles") then
         for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
             if child.Name == "Power Plant" then
-                -- Tìm Power Box
                 local powerBox = child:FindFirstChild("Power Box")
                 if powerBox and powerBox:IsA("Model") then
                     table.insert(powerBoxData, {
@@ -188,7 +187,6 @@ local function runPipeline()
     end
  
     if #powerBoxData > 0 then
-        -- Sắp xếp chọn máy gần nhất dựa theo khoảng cách hiện tại
         local currentPos = humanoidRootPart.Position
         table.sort(powerBoxData, function(a, b)
             return (currentPos - a.Position).Magnitude < (currentPos - b.Position).Magnitude
@@ -201,21 +199,20 @@ local function runPipeline()
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
         task.wait(0.5)
  
-        -- 3. CƠ CHẾ KÍCH MÁY ĐIỆN KẾT HỢP AUTO HOLD (PC & MOBILE)
+        -- 3. CƠ CHẾ CHẠM 3 LẦN VÀ TỰ ĐỘNG GIỮ (TRIPLE TAP & AUTO HOLD)
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
-                print("[Pipeline] Tiến hành kích hoạt nút bấm và giữ...")
+                print("[Pipeline] Tiến hành chạm 3 lần và kích hoạt giữ nút...")
                 
-                -- Kiểm tra thiết bị người chơi
                 local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
-                local noticeText = "Bắt đầu giữ dưới tâm 20px trong 11 giây..."
+                local noticeText = "Đang chạm 3 lần và giữ tâm -20px trong 11 giây..."
                 if isPC then
-                    noticeText = "Bắt đầu giữ tâm -20px & đè phím [E] trong 11 giây..."
+                    noticeText = "Đang chạm 3 lần và đè phím [E] trong 11 giây..."
                 end
 
                 StarterGui:SetCore("SendNotification", {
-                    Title = "Auto Hold System",
+                    Title = "Triple Tap & Hold System",
                     Text = noticeText,
                     Duration = 3
                 })
@@ -224,23 +221,31 @@ local function runPipeline()
                 local centerX = Camera.ViewportSize.X / 2
                 local targetY = (Camera.ViewportSize.Y / 2) + OFFSET_DOWN
 
-                -- [BƯỚC 1]: BẮT ĐẦU ĐÈ GIỮ VÀ CLICK KHÓA VỊ TRÍ
+                -- [BƯỚC 1]: THỰC HIỆN CHẠM (CLICK) 3 LẦN NHANH
+                for i = 1, 3 do
+                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0) -- Nhấn xuống
+                    task.wait(0.05)
+                    VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0) -- Thả ra
+                    task.wait(0.05)
+                end
+
+                -- [BƯỚC 2]: BẮT ĐẦU ĐÈ GIỮ (HOLD) NGAY SAU KHI CHẠM XONG
                 VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
                 if isPC then
                     VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                 end
 
-                -- Đồng thời kích hoạt ProximityPrompt của game theo cơ chế cũ
+                -- Kích hoạt ProximityPrompt của game theo cơ chế gốc
                 if fireproximityprompt then
                     fireproximityprompt(prompt)
                 else
                     prompt:InputHoldBegin()
                 end
 
-                -- [BƯỚC 2]: DUY TRÌ TRẠNG THÁI TRONG 11 GIÂY
+                -- [BƯỚC 3]: DUY TRÌ TRẠNG THÁI GIỮ TRONG 11 GIÂY
                 task.wait(HOLD_DURATION)
 
-                -- [BƯỚC 3]: THẢ RA HOÀN TOÀN
+                -- [BƯỚC 4]: THẢ RA HOÀN TOÀN
                 VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0)
                 if isPC then
                     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
@@ -250,14 +255,14 @@ local function runPipeline()
                     prompt:InputHoldEnd()
                 end
 
-                -- Thông báo hoàn thành giữ máy điện
+                -- Thông báo hoàn thành
                 StarterGui:SetCore("SendNotification", {
-                    Title = "Auto Hold System",
-                    Text = isPC and "Đã thả vị trí và phím [E] thành công!" or "Đã giữ đủ 11 giây và tự động thả!",
+                    Title = "Triple Tap & Hold System",
+                    Text = isPC and "Đã hoàn thành tap + giữ phím [E]!" or "Đã chạm 3 lần và giữ đủ 11 giây!",
                     Duration = 3
                 })
 
-                print("[Pipeline] Interaction successfully forced!")
+                print("[Pipeline] Triple tap and hold forced successfully!")
                 interactionSuccess = true
             end
         end
@@ -266,7 +271,6 @@ local function runPipeline()
     end
  
     -- --- VOTE PLAY AGAIN SEQUENCE (TỰ ĐỘNG ĐỔI TRẬN) ---
-    -- Thêm 1 giây chờ sau khi đã hoàn thành thả nút bấm như bạn yêu cầu
     task.wait(1.0) 
     
     if interactionSuccess then
@@ -287,7 +291,7 @@ end
 
 runPipeline()
 
--- Watchdog kiểm soát kẹt phòng (Giảm xuống 60 giây vì thời gian sửa máy giờ nhanh hơn)
+-- Watchdog kiểm soát kẹt phòng
 task.spawn(function()
     task.wait(60.0) 
     local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
