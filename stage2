@@ -1,0 +1,211 @@
+-- ==========================================
+-- GIAI ĐOẠN 2: LOGIC FARM & TU DONG REPLAY
+-- ==========================================
+print("[PHASE 2] Dang chay chuong trinh farm...")
+
+local MapFolder = Workspace:FindFirstChild("Map")
+local DroppedItemsFolder = Workspace:WaitForChild("DroppedItems")
+local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+local cachedGeneratorLocation = nil
+local excludeFuel = {}
+
+-- Ham quet tim Fuel o gan nhat (Bo qua Fuel loi tren cao)
+local function getClosestFuelPosition(currentPos)
+    local foundValidFuel = nil
+    while not foundValidFuel do
+        local bestTarget = nil
+        local shortestDistance = math.huge
+        
+        if DroppedItemsFolder then
+            for _, item in ipairs(DroppedItemsFolder:GetChildren()) do
+                if item.Name == "Fuel" and not excludeFuel[item] then
+                    local fuelPos = item:GetPivot().Position
+                    local dist = (currentPos - fuelPos).Magnitude
+                    if dist < shortestDistance then
+                        shortestDistance = dist
+                        bestTarget = item
+                    end
+                end
+            end
+        end
+        
+        if not bestTarget then break end
+        
+        local targetPosition = bestTarget:GetPivot().Position
+        if (targetPosition.Y - currentPos.Y) <= 2 then
+            foundValidFuel = bestTarget
+        else
+            excludeFuel[bestTarget] = true -- Loai bo vi Fuel nam sai do cao
+        end
+    end
+    return foundValidFuel
+end
+
+-- Lay vi tri May phat dien
+local function getGeneratorPosition()
+    if cachedGeneratorLocation then return cachedGeneratorLocation end
+    if MapFolder and MapFolder:FindFirstChild("Tiles") then
+        for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
+            if child.Name == "Generator" or child:FindFirstChild("Generator") then
+                cachedGeneratorLocation = child:GetPivot().Position
+                return cachedGeneratorLocation
+            end
+        end
+    end
+    local fallbackGen = Workspace:FindFirstChild("Generator", true)
+    if fallbackGen then
+        cachedGeneratorLocation = fallbackGen:GetPivot().Position
+        return cachedGeneratorLocation
+    end
+    return nil
+end
+
+-- Net-work Exploit: Dich chuyen Fuel ve Generator
+local function FuelTeleport(hrp, targetFuel)
+    local generatorLoc = getGeneratorPosition()
+    if not hrp or not targetFuel or not generatorLoc then return end
+
+    local fuelUnion = targetFuel:FindFirstChild("Union") or targetFuel.PrimaryPart
+    local itemDrag = targetFuel:FindFirstChild("ItemDrag")
+    local networkRemote = itemDrag and itemDrag:FindFirstChild("RequestNetworkOwnership")
+
+    if fuelUnion and networkRemote then
+        pcall(function() networkRemote:FireServer(fuelUnion) end)
+        task.wait(0.12) -- Buffer thoi gian nhan quyen kiem soat phat ly
+        pcall(function() targetFuel:PivotTo(CFrame.new(generatorLoc) + Vector3.new(0, 1, 0)) end)
+        task.wait(0.15) 
+    end
+end
+
+-- Bo xuyen tuong sieu toc mien phi bat hinh
+local function adaptiveCrawlTo(targetPos, hRoot, char)
+    local finalTarget = targetPos + Vector3.new(0, 3, 0)
+    local FAST_SPEED, SLOW_SPEED = 35, 10
+    local lockedYHeight = hRoot.Position.Y
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {char}
+    
+    local lastWallDetectedTime = 0
+
+    while true do
+        if not hRoot or not hRoot.Parent then break end
+        local currentPos = hRoot.Position
+        local remainingVector = Vector3.new(finalTarget.X, lockedYHeight, finalTarget.Z) - currentPos
+        local totalDistance = remainingVector.Magnitude
+
+        if totalDistance <= 2 then
+            hRoot.CFrame = CFrame.new(finalTarget)
+            hRoot.AssemblyLinearVelocity = Vector3.new(0, -5, 0)
+            hRoot.Anchored = true; task.wait(0.05); hRoot.Anchored = false
+            break
+        end
+
+        local direction = remainingVector.Unit
+        local rayResult = Workspace:Raycast(currentPos, direction * 5, raycastParams)
+        if rayResult and rayResult.Instance and rayResult.Instance.CanCollide then
+            lastWallDetectedTime = os.clock()
+        end
+
+        local activeStep = (os.clock() - lastWallDetectedTime >= 0.5) and 1.4 or 0.25
+        local speed = (activeStep == 1.4) and FAST_SPEED or SLOW_SPEED
+        
+        hRoot.CFrame = CFrame.new(currentPos + (direction * activeStep))
+        task.wait(activeStep / speed)
+    end
+end
+
+-- HOAT DONG CHINH CUA PIPELINE
+local function runPipeline()
+    -- B1: Gom Fuel 1
+    local fuelOne = getClosestFuelPosition(humanoidRootPart.Position)
+    if fuelOne then
+        adaptiveCrawlTo(fuelOne:GetPivot().Position, humanoidRootPart, character)
+        task.wait(0.3)
+        FuelTeleport(humanoidRootPart, fuelOne)
+        task.wait(0.5)
+    end
+
+    -- B2: Gom Fuel 2
+    local fuelTwo = getClosestFuelPosition(humanoidRootPart.Position)
+    if fuelTwo then
+        adaptiveCrawlTo(fuelTwo:GetPivot().Position, humanoidRootPart, character)
+        task.wait(0.3)
+        FuelTeleport(humanoidRootPart, fuelTwo)
+        task.wait(0.5)
+    end
+
+    -- B3: Di chuyen toi Power Box va kich hoat
+    local powerBoxData = {}
+    local interactionSuccess = false
+
+    if MapFolder and MapFolder:FindFirstChild("Tiles") then
+        for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
+            if child.Name == "Power Plant" then
+                local powerBox = child:FindFirstChild("Power Box")
+                if powerBox and powerBox:IsA("Model") then
+                    table.insert(powerBoxData, {Instance = powerBox, Position = powerBox:GetPivot().Position})
+                end
+            end
+        end
+    end
+
+    if #powerBoxData > 0 then
+        table.sort(powerBoxData, function(a, b) 
+            return (humanoidRootPart.Position - a.Position).Magnitude < (humanoidRootPart.Position - b.Position).Magnitude 
+        end)
+        
+        local chosenBox = powerBoxData[1].Instance
+        local finalBoxTarget = powerBoxData[1].Position
+
+        adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
+        task.wait(0.5)
+
+        if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
+            local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then
+                for i = 1, 3 do
+                    if fireproximityprompt then
+                        fireproximityprompt(prompt)
+                    else
+                        prompt:InputHoldBegin()
+                        task.wait(prompt.HoldDuration + 0.05)
+                        prompt:InputHoldEnd()
+                    end
+                    task.wait(0.1)
+                end
+                interactionSuccess = true
+            end
+        end
+    end
+
+    -- KICH HOAT VOTE PLAY AGAIN CHUYEN TRAN CO GIAI MIEN PHI
+    if interactionSuccess then
+        local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+            and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
+            and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
+
+        if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
+            pcall(function() PlayAgainRemote:FireServer() end)
+            print("[SUCCESS] Da hoan thanh run, dang tu dong chuyen match...")
+        end
+    end
+end
+
+-- Chay logic farm chính
+runPipeline()
+
+-- WATCHDOG TIMEOUT: Tu dong reset room neu ket qua 60 giay chua xong
+task.spawn(function()
+    task.wait(60.0)
+    local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+        and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
+        and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
+    if PlayAgainRemote then
+        print("[WATCHDOG] Phong qua han 1 phut, cuong che doi server!")
+        pcall(function() PlayAgainRemote:FireServer() end)
+    end
+end)
