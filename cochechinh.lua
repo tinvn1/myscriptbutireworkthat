@@ -34,7 +34,7 @@ local MapFolder = Workspace:FindFirstChild("Map")
 local PermanentNoclipEnabled = true
 
 local OFFSET_DOWN = 20     -- Độ thấp dưới tâm màn hình (pixel)
-local HOLD_DURATION = 19   -- Thời gian giữ (giây)
+local HOLD_DURATION = 11   -- Đã chỉnh thành 11 giây giữ máy
  
 -- --- EMERGENCY DETECTION RADAR ---
 local function evacuateServer(reason)
@@ -175,6 +175,7 @@ local function runPipeline()
     if MapFolder and MapFolder:FindFirstChild("Tiles") then
         for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
             if child.Name == "Power Plant" then
+                -- Tìm Power Box
                 local powerBox = child:FindFirstChild("Power Box")
                 if powerBox and powerBox:IsA("Model") then
                     table.insert(powerBoxData, {
@@ -208,9 +209,9 @@ local function runPipeline()
                 
                 -- Kiểm tra thiết bị người chơi
                 local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
-                local noticeText = "Bắt đầu giữ dưới tâm 20px trong 19 giây..."
+                local noticeText = "Bắt đầu giữ dưới tâm 20px trong 11 giây..."
                 if isPC then
-                    noticeText = "Bắt đầu giữ tâm -20px & đè phím [E] trong 19 giây..."
+                    noticeText = "Bắt đầu giữ tâm -20px & đè phím [E] trong 11 giây..."
                 end
 
                 StarterGui:SetCore("SendNotification", {
@@ -236,7 +237,7 @@ local function runPipeline()
                     prompt:InputHoldBegin()
                 end
 
-                -- [BƯỚC 2]: DUY TRÌ TRẠNG THÁI TRONG 19 GIÂY
+                -- [BƯỚC 2]: DUY TRÌ TRẠNG THÁI TRONG 11 GIÂY
                 task.wait(HOLD_DURATION)
 
                 -- [BƯỚC 3]: THẢ RA HOÀN TOÀN
@@ -252,7 +253,7 @@ local function runPipeline()
                 -- Thông báo hoàn thành giữ máy điện
                 StarterGui:SetCore("SendNotification", {
                     Title = "Auto Hold System",
-                    Text = isPC and "Đã thả vị trí và phím [E] thành công!" or "Đã giữ đủ 19 giây và tự động thả!",
+                    Text = isPC and "Đã thả vị trí và phím [E] thành công!" or "Đã giữ đủ 11 giây và tự động thả!",
                     Duration = 3
                 })
 
@@ -265,7 +266,9 @@ local function runPipeline()
     end
  
     -- --- VOTE PLAY AGAIN SEQUENCE (TỰ ĐỘNG ĐỔI TRẬN) ---
-    task.wait(0.5) 
+    -- Thêm 1 giây chờ sau khi đã hoàn thành thả nút bấm như bạn yêu cầu
+    task.wait(1.0) 
+    
     if interactionSuccess then
         local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
             and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
@@ -275,7 +278,7 @@ local function runPipeline()
             pcall(function()
                 PlayAgainRemote:FireServer()
             end)
-            print("[Play Again] Sequence executed successfully.")
+            print("[Play Again] Đã gửi lệnh đổi server sau khi chờ thêm 1 giây.")
         else
             warn("[Warning] VotePlayAgain remote path could not be found.")
         end
@@ -284,9 +287,9 @@ end
 
 runPipeline()
 
--- Watchdog kiểm soát kẹt phòng (Thêm thời gian chờ vì phải đợi giữ máy điện 19s)
+-- Watchdog kiểm soát kẹt phòng (Giảm xuống 60 giây vì thời gian sửa máy giờ nhanh hơn)
 task.spawn(function()
-    task.wait(80.0) -- Tăng lên 80 giây để không bị nhảy server quá sớm khi đang giữ máy
+    task.wait(60.0) 
     local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
         and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
         and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
