@@ -44,6 +44,9 @@ local function loadTinHubModule(scriptName)
     return success
 end
 
+-- Đợi 3 giây trước khi bắt đầu tải các module con theo yêu cầu
+task.wait(3)
+
 -- 2. THỰC THI NẠP TỪNG CHỨC NĂNG THEO THỨ TỰ LOGIC
 -- Tải các module bổ trợ góc nhìn và bảo mật trước
 loadTinHubModule("camera.lua")
