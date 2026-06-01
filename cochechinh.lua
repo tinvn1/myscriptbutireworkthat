@@ -1,10 +1,9 @@
 -- --- CHECK GAME ID BẢO VỆ CHỐNG CHẠY SAI SẢNH CHỜ ---
--- Lưu ý: Kiểm tra cả PlaceId và GameId để đảm bảo chính xác tuyệt đối
 local TARGET_ID = 116139828947259
 
 if game.PlaceId ~= TARGET_ID and game.GameId ~= TARGET_ID then
     warn("[Loader] Sai Game ID! Script đã tự động tắt để bảo vệ an toàn.")
-    return -- Dừng toàn bộ script ngay lập tức
+    return 
 end
 
 print("[Loader] Xác thực Game ID thành công! Đang tiến hành tải script...")
@@ -36,10 +35,7 @@ local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 10)
 
 if not humanoidRootPart then
-    warn("[Critical] Không tìm thấy HumanoidRootPart kịp lúc! Đang ép Rejoin phòng khác...")
-    pcall(function()
-        game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
-    end)
+    warn("[Critical] Không tìm thấy HumanoidRootPart kịp lúc!")
     return
 end
 
@@ -48,52 +44,37 @@ task.wait(1.5)
 -- CONFIGURATION & REFERENCES --
 local PermanentNoclipEnabled = true
 
--- --- CƠ CHẾ REJOIN AN TOÀN CHỐNG KẸT LOBBY (VOTE PLAY AGAIN) ---
-local function safeRejoin(reason)
-    warn("[CRITICAL REJOIN]: " .. tostring(reason))
+-- --- CƠ CHẾ AUTO VOTE REPLAY GỐC TỪ SCRIPT 2 ---
+local function forceVotePlayAgain(reason)
+    warn("[REPLAY ENGINE]: " .. tostring(reason))
     
-    PermanentNoclipEnabled = false
-    
-    task.spawn(function()
-        -- 1. Sử dụng Remote Play Again (Ưu tiên số 1 - siêu tốc)
-        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-        local misc = remotes and remotes:FindFirstChild("Misc")
-        local PlayAgainRemote = misc and misc:FindFirstChild("VotePlayAgain")
+    local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+        and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
+        and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
 
-        if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
-            local success = pcall(function()
-                PlayAgainRemote:FireServer()
-            end)
-            if success then
-                print("[Escape] Đang VotePlayAgain để đổi server nhanh...")
-                task.wait(1.5)
-            end
-        end
-        
-        -- 2. Phương thức dự phòng 1: TeleportService thông thường
-        print("[Escape] Sử dụng phương thức Teleport dự phòng...")
-        local TeleportService = game:GetService("TeleportService")
+    if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
         pcall(function()
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            PlayAgainRemote:FireServer()
         end)
-
-        -- 3. Phương thức dự phòng 2: Ép Ngắt Kết Nối (Kick)
-        task.wait(3.5)
-        LocalPlayer:Kick("[REJOIN SYSTEM] Đang ngắt kết nối an toàn để reset sảnh chờ!")
-    end)
+        print("[Play Again] Đã kích hoạt Remote VotePlayAgain thành công.")
+    else
+        warn("[Warning] Đường dẫn Remote VotePlayAgain không tồn tại hoặc game đã thay đổi kết cấu.")
+    end
     
+    -- Khóa luồng hiện tại để nhân vật đứng yên chờ server xử lý chuyển map
+    PermanentNoclipEnabled = false
     task.wait(0.1)
-    error("Script chủ động dừng luồng cũ để chuẩn bị đổi server.")
+    error("Script execution paused. Waiting for server replay transition...")
 end
 
 -- RADAR CHỐNG NGƯỜI CHƠI KHÁC TRONG PHÒNG FARM
 if #Players:GetPlayers() > 1 then
-    safeRejoin("Phát hiện phòng hiện tại có người chơi khác từ trước!")
+    forceVotePlayAgain("Phát hiện phòng hiện tại có người chơi khác từ trước!")
 end
 
 Players.PlayerAdded:Connect(function(newPlayer)
     if newPlayer ~= LocalPlayer then
-        safeRejoin("Phát hiện người chơi mới vừa kết nối: " .. newPlayer.Name)
+        forceVotePlayAgain("Phát hiện người chơi mới vừa kết nối: " .. newPlayer.Name)
     end
 end)
 
@@ -223,7 +204,7 @@ local function adaptiveCrawlTo(targetPos, hrpPart, characterModel)
     isMoving = false
 end
 
--- --- 4. CƠ CHẾ TƯƠNG TÁC VÀ KÍCH HOẠT REJOIN LẬP TỨC KHI XONG ---
+-- --- 4. CƠ CHẾ TƯƠNG TÁC VÀ KÍCH HOẠT REPLAY LUÔN KHI XONG ---
 local function interactWithClosestPowerBox()
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local hrpPart = char:WaitForChild("HumanoidRootPart")
@@ -270,19 +251,20 @@ local function interactWithClosestPowerBox()
                     prompt:InputHoldEnd()
                 end
                 
-                print("[PowerBox] Sửa máy thành công! Đang rời phòng...")
-                safeRejoin("Hoàn thành sửa máy (Power Box)")
+                -- CHỈ VOTE REPLAY LẬP TỨC KHÔNG KICK/TELEPORT THỦ CÔNG
+                print("[PowerBox] Sửa máy thành công! Đang kích hoạt Vote Chơi Lại...")
+                forceVotePlayAgain("Hoàn thành sửa máy (Power Box)")
             end
         end
     else
-        warn("[PowerBox] Hiện tại không tìm thấy Power Box nào. Đổi server bảo hiểm...")
-        safeRejoin("Không tìm thấy Power Box")
+        warn("[PowerBox] Hiện tại không tìm thấy Power Box nào. Kích hoạt Vote đổi phòng...")
+        forceVotePlayAgain("Không tìm thấy Power Box trên bản đồ")
     end
 end
 
--- --- 5. BẢO HIỂM CHỐNG KẸT / TREO MÀN HÌNH CHỜ (WATCHDOG 45 GIÂY) ---
-task.delay(45, function()
-    safeRejoin("Hết thời gian quy định cho một lượt farm (Watchdog Timeout)")
+-- --- 5. BẢO HIỂM WATCHDOG ĐÚNG 60 GIÂY THEO SCRIPT 2 ---
+task.delay(60, function()
+    forceVotePlayAgain("Quá thời gian quy định cho một lượt farm (Watchdog Timeout 60s)")
 end)
 
 -- --- 6. LUỒNG THỰC THI CHÍNH ---
