@@ -1,149 +1,116 @@
--- Chờ trò chơi tải xong hoàn toànt
+-- Chờ trò chơi tải xong hoàn toàn
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
-print("[📱 MOBILE SYSTEM] Khởi chạy luồng giả lập click UI an toàn...");
+print("[🚀 AUTO LOBBY LOADER] Đang khởi chạy luồng tự động load vào màn chơi...");
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
 
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 local LobbyRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Lobby")
 
--- Hàm kích nổ sự kiện click chuẩn cho mọi thiết bị Mobile (Bypass lỗi phím)
-local function mobileClick(button)
-    if not button then return end
-    -- Duyệt qua tất cả các kết nối click có sẵn của nút bấm để kích hoạt trực tiếp
-    local connections = getconnections or button.MouseButton1Click
-    if type(connections) == "function" then
-        button.MouseButton1Click:Fire()
-    else
-        for _, connection in pairs(getconnections(button.MouseButton1Click)) do
-            connection:Fire()
-        end
-        for _, connection in pairs(getconnections(button.Activated)) do
-            connection:Fire()
-        end
+-- Hàm xử lý kích nổ sự kiện Click UI (Bypass trễ hoàn toàn trên Mobile)
+local function safeClick(button)
+    if not button then return false end
+    if getconnections then
+        local clicked = false
+        for _, connection in pairs(getconnections(button.MouseButton1Click)) do connection:Fire() clicked = true end
+        for _, connection in pairs(getconnections(button.Activated)) do connection:Fire() clicked = true end
+        if clicked then return true end
     end
-end
-
--- Hàm thực hiện chuyển Server ít người (Server Hop)
-local function hopToLowPlayerServer()
-    print("[🔄 SERVER HOP] Đang quét tìm Server vắng...")
-    local success = pcall(function()
-        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-        local response = game:HttpGet(url)
-        local data = HttpService:JSONDecode(response)
-        
-        if data and data.data then
-            for _, server in pairs(data.data) do
-                if server.id ~= game.JobId and server.playing and server.playing < server.maxPlayers then
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, localPlayer)
-                    return true
-                end
-            end
-        end
-    end)
-    if not success then TeleportService:Teleport(game.PlaceId, localPlayer) end
+    local success = pcall(function() button.MouseButton1Click:Fire() end)
+    return success
 end
 
 -- =========================================================================
--- BƯỚC 1: QUÉT SẢNH VÀ ĐẾM SỐ PHÒNG ĐÃ CÓ NGƯỜI
+-- 🏃 BƯỚC 1: TÌM Ô HOÀN TOÀN TRỐNG (0 NGƯỜI) ĐỂ CHIẾM PHÒNG SOLO
 -- =========================================================================
 local lobbiesFolder = Workspace:FindFirstChild("Lobbies")
 local targetHitbox = nil
-local occupiedRoomsCount = 0 
+local selectedRoom = nil
 
 if lobbiesFolder then
+    -- Vòng lặp quét nhanh qua 10 phòng của sảnh chờ
     for i = 1, 10 do
         local lobby = lobbiesFolder:FindFirstChild(tostring(i))
         if lobby then
             local labelObj = lobby:FindFirstChildWhichIsA("TextLabel", true) or lobby:FindFirstChild("Status", true)
-            if labelObj then
-                if not (string.find(labelObj.Text, "0/") or string.find(labelObj.Text, "0 Players")) then
-                    occupiedRoomsCount = occupiedRoomsCount + 1
-                else
-                    if not targetHitbox then
-                        local hitbox = lobby:FindFirstChild("Hitbox") or lobby:FindFirstChildWhichIsA("BasePart")
-                        if hitbox then
-                            targetHitbox = hitbox
-                        end
-                    end
+            
+            -- Kiểm tra nếu phòng hiển thị trạng thái trống (0 người hoặc "0/")
+            if labelObj and (string.find(labelObj.Text, "0/") or string.find(labelObj.Text, "0 Players")) then
+                local hitbox = lobby:FindFirstChild("Hitbox") or lobby:FindFirstChildWhichIsA("BasePart")
+                if hitbox then
+                    targetHitbox = hitbox
+                    selectedRoom = i
+                    break
                 end
             end
         end
     end
 end
 
--- Nếu từ 3 phòng trở lên đã có người, tự động đổi Server ngay
-if occupiedRoomsCount >= 3 then
-    warn("[🚨] Sảnh đông (" .. occupiedRoomsCount .. " phòng). Đang đổi Server...")
-    hopToLowPlayerServer()
-    return false
-end
-
 -- =========================================================================
--- BƯỚC 2: TIẾN VÀO Ô VÀ KÍCH HOẠT CLICK SỐ 1 + CREATE
+-- ⚡ BƯỚC 2: TIẾN HÀNH CHIẾM GIỮ PHÒNG VÀ KHÓA PHÒNG 1 NGƯỜI (SOLO BYPASS)
 -- =========================================================================
 if targetHitbox then
-    local char = localPlayer.Character or localPlayer.CharacterAdded:Wait()
-    local humanoid = char:WaitForChild("Humanoid")
-    local rootPart = char:WaitForChild("HumanoidRootPart")
+    print("[💎] Tìm thấy phòng trống số " .. selectedRoom .. "! Tiến hành chiếm giữ phòng...")
     
-    -- Chạy bộ vào ô trống
-    humanoid:MoveTo(targetHitbox.Position)
-    local startTime = tick()
-    while (rootPart.Position - targetHitbox.Position).Magnitude > 4 do
-        task.wait(0.1)
-        if tick() - startTime > 8 then break end
+    local char = localPlayer.Character
+    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+    
+    if rootPart then
+        -- Dịch chuyển tức thời nhân vật chạm vào Hitbox sảnh chờ để kích hoạt sự kiện Join phòng vật lý
+        rootPart.CFrame = targetHitbox.CFrame
+        task.wait(0.3) -- Chờ tín hiệu phản hồi mạng đồng bộ
     end
     
-    task.wait(0.5) 
-    
+    -- Gửi Remote yêu cầu tạo Party sảnh chờ độc lập
     pcall(function()
         LobbyRemotes.CreateParty:InvokeServer()
     end)
     
-    -- Chờ bảng UI hiển thị hẳn lên màn hình Mobile
-    task.wait(1.2) 
-
-    local mainGui = playerGui:FindFirstChild("Main")
-    local createPartyWindow = mainGui and mainGui:FindFirstChild("CreateParty")
+    task.wait(1.2) -- Chờ UI phòng "CreateParty" xuất hiện hoàn chỉnh trên màn hình
     
-    if createPartyWindow then
-        -- Định vị chính xác phần tử UI nút số 1 và nút Create
-        local buttonOne = createPartyWindow:FindFirstChild("1") or createPartyWindow:FindFirstChildWhichIsA("GuiButton", true)
-        local createButton = createPartyWindow:FindFirstChild("Create") or createPartyWindow:FindFirstChild("Confirm", true)
-        
-        -- 1. Giả lập bấm nút chọn số 1 người
-        if buttonOne then
-            print("[🎯] Đang chọn ô số 1...");
-            mobileClick(buttonOne)
-            task.wait(0.4) -- Đợi giao diện Mobile chuyển trạng thái màu vàng
-        end
-        
-        -- 2. Giả lập bấm nút Create và triệt tiêu UI ngay lập tức để né nút Leave
-        if createButton then
-            print("[🎯] Đang bấm nút Create...");
-            mobileClick(createButton)
-            
-            -- 🔥 CHỐNG BẤM NHẦM NÚT LEAVE: Ẩn ngay lập tức bảng UI này đi 
-            createPartyWindow.Visible = false
-            
-            -- Chặn đứng mọi lệnh bấm dư thừa tiếp theo
-            print("[🔥 SUCCESS] Phòng đơn đã được tạo! Đang đợi chuyển cảnh...");
-        end
+    -- ÉP BUỘC SERVER: Thay đổi kích thước phòng tối đa xuống 1 người (Ngăn chặn người khác nhảy vào ké)
+    print("[⚙️] Đang ép Server hạ giới hạn phòng xuống 1 người để khóa Solo...")
+    pcall(function()
+        LobbyRemotes.SetPartySize:InvokeServer(1)
+    end)
+    
+    task.wait(0.5) -- Đợi dữ liệu máy chủ cập nhật trạng thái giới hạn phòng thành 1/1
+    
+    -- Định vị nút bấm "Create" trên giao diện UI để tải map
+    local createButton = playerGui:FindFirstChild("Main") 
+        and playerGui.Main:FindFirstChild("CreateParty") 
+        and playerGui.Main.CreateParty:FindFirstChild("Create")
+    
+    if createButton then
+        print("[🔥] Khóa phòng đơn thành công! Đang nhấn nút khởi động nạp map...")
+        safeClick(createButton)
     else
-        warn("[❌] Không tìm thấy giao diện CreateParty trên thiết bị!")
+        -- Cơ chế dự phòng: Nếu giao diện UI bị ẩn hoặc lỗi không thấy nút, cưỡng chế gọi Server tự load map bằng Remote
+        print("[⚠️] Không thấy nút giao diện UI, gửi Remote cưỡng chế chạy màn chơi đơn từ xa...")
+        pcall(function()
+            LobbyRemotes.JoinLobby:InvokeServer("")
+        end)
     end
 else
-    warn("[⚠️] Không tìm thấy ô trống, đang tiến hành nhảy Server...")
-    hopToLowPlayerServer()
+    -- =========================================================================
+    -- 🚨 CƠ CHẾ DỰ PHÒNG: TỰ TẠO PHÒNG CÁCH LY KHI SẢNH CHỜ KHÔNG CÓ Ô TRỐNG
+    -- =========================================================================
+    warn("[⚠️] Toàn bộ sảnh chờ đều kín phòng! Đang kích hoạt giao thức tạo phòng đơn cách ly khẩn cấp...")
+    
+    pcall(function()
+        LobbyRemotes.CreateParty:InvokeServer()
+        task.wait(0.5)
+        LobbyRemotes.SetPartySize:InvokeServer(1)
+        task.wait(0.5)
+        LobbyRemotes.JoinLobby:InvokeServer("")
+    end)
 end
 
 return true
