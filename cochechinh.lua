@@ -1,7 +1,7 @@
 -- Feel free to adjust
 -- Optimized Custom Mode: Pure Power Box Route (Using Original Crawl Mechanic)
 -- Original Author: TheAnonymous in RScript
--- Updated & Optimized by: TinHub Project + Triple Tap/Press Only (No Hold) + Gem Watchdog
+-- Updated & Optimized by: TinHub Project + FireProximityPrompt + Gem Watchdog
 
 print("Loading via TinHub Engine")
  
@@ -23,18 +23,14 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
-local Camera = workspace.CurrentCamera
  
 -- --- CONFIGURATION & REFERENCES ---
 local LocalPlayer = Players.LocalPlayer
 local MapFolder = Workspace:FindFirstChild("Map")
 local PermanentNoclipEnabled = true
-
-local OFFSET_DOWN = 20     -- Độ thấp dưới tâm màn hình (pixel)
 
 -- BIẾN KIỂM SOÁT LUỒNG TOÀN CỤC KHẨN CẤP
 local forceStopInteraction = false
@@ -297,49 +293,37 @@ local function runPipeline()
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
         task.wait(0.5)
  
-        -- 3. CHỈ THỰC HIỆN BẤM MÀN HÌNH HOẶC BẤM E 3 LẦN (CẮT BỎ HOÀN TOÀN CHU KỲ GIỮ)
+        -- ===================================================================
+        -- 3. CƠ CHẾ TÁC ĐỘNG TỪ XA GỐC (THAY THẾ HOÀN TOÀN TRIPLE TAP VIRTUAL INPUT)
+        -- ===================================================================
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
                 if forceStopInteraction then return end -- Ngắt nếu Gem nhảy sớm
 
-                local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
-                local centerX = Camera.ViewportSize.X / 2
-                local targetY = (Camera.ViewportSize.Y / 2) + OFFSET_DOWN
-
-                local noticeText = "Đang chạm màn hình nhanh 3 lần..."
-                if isPC then
-                    noticeText = "Đang gõ nhanh phím [E] 3 lần..."
-                end
-
                 StarterGui:SetCore("SendNotification", {
                     Title = "Interaction System",
-                    Text = noticeText,
+                    Text = "Đang kích hoạt bẻ khóa Power Box từ xa...",
                     Duration = 2
                 })
 
-                -- THỰC HIỆN NHẤP NHẢ 3 LẦN NHANH (MÔ PHỎNG PHÍM/CHẠM MÀN HÌNH)
-                if isPC then
-                    print("[Pipeline] Phát hiện PC: Đang gõ phím E 3 lần...")
-                    for i = 1, 3 do
-                        if forceStopInteraction then return end
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                        task.wait(0.05)
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                        task.wait(0.05)
+                print("[Pipeline] Đang ép tương tác ProximityPrompt bằng Bypass Engine...")
+                for i = 1, 3 do -- Lặp 3 lần liên tiếp để tránh mất gói tin
+                    if forceStopInteraction then return end
+                    
+                    if fireproximityprompt then
+                        -- Ưu tiên sử dụng hàm gốc của các bản Executor chuyên dụng (Bypass Hold cực nhanh)
+                        fireproximityprompt(prompt)
+                    else
+                        -- Phương án dự phòng chuẩn Core-Engine nếu chạy Executor thường không có hàm trên
+                        prompt:InputHoldBegin()
+                        task.wait(prompt.HoldDuration + 0.05)
+                        prompt:InputHoldEnd()
                     end
-                else
-                    print("[Pipeline] Phát hiện Mobile: Đang chạm màn hình 3 lần...")
-                    for i = 1, 3 do
-                        if forceStopInteraction then return end
-                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0)
-                        task.wait(0.05)
-                    end
+                    task.wait(0.1)
                 end
 
-                print("[Pipeline] Đã gõ/chạm đủ 3 lần! Bỏ qua chu kỳ đè giữ.")
+                print("[Pipeline] Tác động thành công! Đã bỏ qua chu kỳ gõ/chạm màn hình.")
                 interactionSuccess = true
             end
         end
