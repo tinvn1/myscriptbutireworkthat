@@ -1,93 +1,66 @@
--- =========================================================================
--- 🚀 DISCORD WEBHOOK LOG - CHỈ GỬI ĐÚNG 1 LẦN DUY NHẤT (ANTI-SPAM)
--- =========================================================================
+-- MAIN FARMING PIPELINE EXECUTION ENGINE (TINHUB VERSION)
+-- Khởi chạy và quản lý toàn bộ hệ thống script thông qua nguồn TinHub
 
--- Sử dụng biến toàn cục để kiểm tra xem script này đã từng chạy trong server này chưa
-if _G.Webhook_Already_Sent then 
-    print("[WEBHOOK] He thong da gui thong bao truoc do. Bo qua de tranh spam!")
-    return 
+print("[TinHub System] Đang khởi tạo luồng kết nối...")
+
+-- 1. Chờ game tải hoàn chỉnh để tránh lỗi mất gói tin
+if not game:IsLoaded() then
+    game.Loaded:Wait()
 end
 
-local request = http_request or request or syn.request
-if request then
-    task.spawn(function()
-        local players = game:GetService("Players")
-        local localPlayer = players.LocalPlayer
+local ContentProvider = game:GetService("ContentProvider")
+while ContentProvider.RequestQueueSize > 0 do
+    task.wait(0.5)
+end
+
+print("[TinHub System] Kết nối thành công. Bắt đầu đồng bộ dữ liệu đám mây...")
+task.wait(1.5)
+
+-- Cấu hình đường dẫn URL gốc của bạn trên TinHub / Github / Pastebin lưu trữ code công khai
+-- (Bạn có thể thay đổi đường dẫn link bên dưới cho đúng tài khoản lưu trữ của bạn)
+local BaseURL = "https://raw.githubusercontent.com/TinHubProject/Main/main/scripts/"
+
+-- Hàm nạp dữ liệu trực tuyến an toàn chống lỗi treo/kẹt tiến trình
+local function loadTinHubModule(scriptName)
+    local scriptURL = BaseURL .. scriptName
+    local success, result = pcall(function()
+        -- Gọi API lấy mã nguồn trực tuyến từ bộ nhớ đám mây của Executor
+        local getScriptCode = game:HttpGet(scriptURL)
+        local scriptFunction, compileError = loadstring(getScriptCode)
         
-        while not localPlayer do
-            task.wait(0.5)
-            localPlayer = players.LocalPlayer
+        if scriptFunction then
+            task.spawn(scriptFunction) -- Chạy luồng độc lập tránh xung đột
+            print("[TinHub Load] Đã đồng bộ thành công: " .. scriptName)
+            return true
+        else
+            warn("[TinHub Compile Error] Phát hiện lỗi cú pháp trong file nguồn trực tuyến " .. scriptName .. ": " .. tostring(compileError))
         end
-        
-        -- Chờ PlayerGui xuất hiện ổn định
-        local playerGui = localPlayer:WaitForChild("PlayerGui", 20)
-        if not playerGui then return end
-
-        -- Tìm và đợi giao diện MainUI hiển thị số lượng Gem
-        local mainUI = playerGui:WaitForChild("MainUI", 20)
-        local gemCount = nil
-        
-        if mainUI then
-            gemCount = mainUI:FindFirstChild("GemDisplay") and mainUI.GemDisplay:FindFirstChild("Count")
-            local timeout = 0
-            while not gemCount and timeout < 10 do
-                pcall(function()
-                    gemCount = playerGui.MainUI.GemDisplay.Count
-                end)
-                if gemCount then break end
-                task.wait(0.5)
-                timeout = timeout + 0.5
-            end
-        end
-
-        -- Lấy văn bản Gem hiển thị thực tế trên màn hình
-        local currentGem = "0"
-        if gemCount then
-            currentGem = gemCount.Text
-        end
-
-        -- Khởi tạo cấu trúc Embed gửi Discord chỉn chu
-        local payload = {
-            ["embeds"] = {{
-                ["title"] = "💎 THÔNG BÁO SỐ LƯỢNG GEM 💎",
-                ["color"] = 65430, -- Màu xanh Neon
-                ["fields"] = {
-                    {
-    ["name"] = "👤 Tên nhân vật:",
-    -- Thêm || ở đầu và cuối để tạo hiệu ứng ẩn chữ trên Discord
-    ["value"] = "||`" .. localPlayer.Name .. "`||",
-    ["inline"] = true
-},
-
-                    {
-                        ["name"] = "💎 Số lượng Gem hiện tại:",
-                        ["value"] = "**" .. tostring(currentGem) .. "**",
-                        ["inline"] = true
-                    },
-                    {
-                        ["name"] = "🎮 Game ID:",
-                        ["value"] = "||`" .. tostring(game.PlaceId) .. "`||",
-                        ["inline"] = true
-                    }
-                },
-                ["footer"] = {
-                    ["text"] = "Hệ thống vận hành tự động"
-                },
-                ["timestamp"] = DateTime.now():ToIsoDate()
-            }}
-        }
-
-        -- Đánh dấu trạng thái ĐÃ GỬI ngay lập tức trước khi request thực hiện xong (Khóa luồng)
-        _G.Webhook_Already_Sent = true
-
-        pcall(function()
-            request({
-                Url = _G.Customer_Webhook,
-                Method = "POST",
-                Headers = {["content-type"] = "application/json"},
-                Body = game:GetService("HttpService"):JSONEncode(payload)
-            })
-            print("[🚀 SYSTEM] Webhook chuan da keu thanh cong (Duy nhat 1 lan)!")
-        end)
+        return false
     end)
+    
+    if not success then
+        warn("[TinHub Critical Error] Không thể kết nối hoặc tải dữ liệu từ: " .. scriptURL .. " | Lỗi: " .. tostring(result))
+    end
+    return success
+end
+
+-- 2. THỰC THI NẠP TỪNG CHỨC NĂNG THEO THỨ TỰ LOGIC
+-- Tải các module bổ trợ góc nhìn và bảo mật trước
+loadTinHubModule("camera.lua")
+task.wait(0.5)
+
+loadTinHubModule("checker.lua")
+task.wait(0.5)
+
+loadTinHubModule("webhook.lua")
+task.wait(0.5)
+
+-- Nạp lõi chính: Cơ chế xuyên tường và kích hoạt máy điện duy nhất
+print("[TinHub System] Đang đồng bộ lõi di chuyển xuyên tường...")
+local coreLoaded = loadTinHubModule("cochechinh.lua")
+
+if coreLoaded then
+    print("[TinHub System] KÍCH HOẠT THÀNH CÔNG! Toàn bộ quy trình farm bắt đầu vận hành.")
+else
+    warn("[TinHub System] Khởi động thất bại. Vui lòng kiểm tra lại đường dẫn link BaseURL hoặc file code 'cochechinh.lua' trên máy chủ.")
 end
