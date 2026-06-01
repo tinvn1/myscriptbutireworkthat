@@ -1,10 +1,3 @@
---[[
-    ╔═════════════════════════════════════════════════════════════════╗
-        TINHUB PROJECT - AUTOMATED GEM WATCHDOG SYSTEM (DELAY FIX)
-        * Original Credits: Developed by TheAnonymous (RScript)
-        * Modified & Updated: Managed under TinHub Cloud Ecosystem
-    ╚═════════════════════════════════════════════════════════════════╝
---]]
 
 -- Reset trạng thái biến kích hoạt khi sang server mới
 _G.StartGemCheck = false
