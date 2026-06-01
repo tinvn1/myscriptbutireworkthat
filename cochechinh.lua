@@ -1,4 +1,70 @@
--- --- 1. HÀM DI CHUYỂN ADAPTIVE CRAWL (BẮT BUỘC ĐỂ DI CHUYỂN TỚI BOX) ---
+-- --- 0. KHỞI TẠO VÀ CHỜ GAME TẢI XONG ---
+print("Loading...")
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+ 
+local ContentProvider = game:GetService("ContentProvider")
+while ContentProvider.RequestQueueSize > 0 do
+    task.wait(0.5)
+end
+task.wait(2.0) -- Đợi thêm một chút để đảm bảo map đã dựng xong
+
+-- SERVICES --
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+ 
+-- CONFIGURATION & REFERENCES --
+local LocalPlayer = Players.LocalPlayer
+local PermanentNoclipEnabled = true
+
+-- --- 1. CƠ CHẾ NOCLIP VĨNH VIỄN GỐC (BACKGROUND SERVICE) ---
+local function StartPermanentNoclip()
+    local noclipConnection = nil
+ 
+    local function ConnectNoclip()
+        if noclipConnection then noclipConnection:Disconnect() end
+ 
+        noclipConnection = RunService.Stepped:Connect(function()
+            if not PermanentNoclipEnabled then
+                if noclipConnection then noclipConnection:Disconnect() end
+                return
+            end
+ 
+            local character = LocalPlayer.Character
+            if character then
+                -- Loại bỏ hoàn toàn va chạm của tất cả các bộ phận nhân vật trước khi chu kỳ physics tính toán
+                for _, child in ipairs(character:GetDescendants()) do
+                    if child:IsA("BasePart") and child.CanCollide then
+                        child.CanCollide = false
+                    end
+                end
+ 
+                -- Triệt tiêu gia tốc/vận tốc gốc để tránh bị chống gian lận giật ngược (Anti-cheat rubberbanding)
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end
+            end
+        end)
+    end
+ 
+    ConnectNoclip()
+ 
+    -- Tự động áp dụng lại vòng lặp Noclip mỗi khi nhân vật hồi sinh (Respawn)
+    LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.1)
+        ConnectNoclip()
+    end)
+end
+
+-- Kích hoạt Noclip chạy ngầm ngay khi chạy script
+StartPermanentNoclip()
+print("[Noclip] Đã kích hoạt cơ chế xuyên tường vĩnh viễn!")
+
+-- --- 2. HÀM DI CHUYỂN ADAPTIVE CRAWL (XUYÊN TƯỜNG GỐC) ---
 local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     local finalTarget = targetPos + Vector3.new(0, 3, 0)
     local FAST_SPEED = 35     
@@ -12,13 +78,12 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.FilterDescendantsInstances = {character} 
  
-    -- [WATCHDOG CONFIG] Thiết lập cấu hình chống kẹt
+    -- [WATCHDOG] Cấu hình chống kẹt góc khi di chuyển
     local isMoving = true
     local lastPosition = humanoidRootPart.Position
     local lastMoveTime = os.clock()
-    local STUCK_THRESHOLD = 3 -- Số giây tối đa đứng yên một chỗ trước khi tính là bị kẹt
+    local STUCK_THRESHOLD = 3 -- Tối đa 3 giây đứng im tại chỗ sẽ tự nhảy thẳng tới đích
 
-    -- Khởi chạy Watchdog ngầm
     task.spawn(function()
         while isMoving do
             task.wait(0.5)
@@ -32,7 +97,7 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
                 lastMoveTime = os.clock()
             else
                 if os.clock() - lastMoveTime >= STUCK_THRESHOLD then
-                    warn("[Watchdog] Phát hiện nhân vật bị kẹt góc! Kích hoạt Teleport Bypass...")
+                    warn("[Watchdog] Phát hiện bị kẹt góc nặng! Đang Bypass dịch chuyển thẳng tới đích...")
                     humanoidRootPart.CFrame = CFrame.new(finalTarget)
                     break
                 end
@@ -64,7 +129,7 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
  
         local direction = remainingVector.Unit
         local lookAheadDistance = 5
-        local rayResult = workspace:Raycast(currentPos, direction * lookAheadDistance, raycastParams)
+        local rayResult = Workspace:Raycast(currentPos, direction * lookAheadDistance, raycastParams)
  
         if rayResult and rayResult.Instance and rayResult.Instance.CanCollide then
             lastWallDetectedTime = os.clock()
@@ -87,14 +152,13 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     isMoving = false
 end
 
--- --- 2. CƠ CHẾ REJOIN (VÀO LẠI SERVER) ---
+-- --- 3. CƠ CHẾ REJOIN (TỰ ĐỘNG ĐỔI SERVER SẠCH) ---
 local function safeRejoin()
-    print("[System] Hết thời gian 2 phút! Đang tiến hành Rejoin sang server mới...")
+    print("[System] Hết thời gian hạn định! Tiến hành Rejoin đổi server mới...")
     local TeleportService = game:GetService("TeleportService")
-    local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
 
-    -- Bỏ qua màn hình báo lỗi ngắt kết nối/bị kích nếu có
+    -- Bỏ qua màn hình thông báo lỗi ngắt kết nối của Roblox nếu có
     local coreGui = game:GetService("CoreGui")
     if coreGui:FindFirstChild("RobloxPromptGui") then
         local prompt = coreGui.RobloxPromptGui.promptOverlay:FindFirstChild("ErrorPrompt")
@@ -103,23 +167,23 @@ local function safeRejoin()
         end
     end
 
-    -- Thực hiện Teleport về lại game để nhảy server
+    -- Thực hiện Teleport nhảy server
     pcall(function()
         TeleportService:Teleport(game.PlaceId, LocalPlayer)
     end)
     
-    -- Đợi đề phòng lỗi mạng, sẽ cố gắng thử lại sau 5 giây
+    -- Dự phòng nếu mạng lag, tiếp tục thử lại sau 5 giây
     task.wait(5)
-    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    pcall(function()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end)
 end
 
--- --- 3. CƠ CHẾ QUÉT VÀ TƯƠNG TÁC POWER BOX ---
+-- --- 4. CƠ CHẾ QUÉT VÀ TƯƠNG TÁC POWER BOX ---
 local function interactWithClosestPowerBox()
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-    local MapFolder = workspace:FindFirstChild("Map")
+    local MapFolder = Workspace:FindFirstChild("Map")
     
     local powerBoxData = {}
     local interactionSuccess = false
@@ -179,11 +243,11 @@ local function interactWithClosestPowerBox()
     return interactionSuccess
 end
 
--- --- 4. KHỞI CHẠY HẸN GIỜ REJOIN TRƯỚC (BẮT BUỘC CHẠY SONG SONG) ---
+-- --- 5. HẸN GIỜ ÉP REJOIN SAU 2 PHÚT (120 GIÂY) ---
 task.delay(120, function()
     safeRejoin()
 end)
 
--- --- 5. CHẠY LUỒNG THỰC THI CHÍNH ---
-print("[Main] Script bắt đầu hoạt động. Đếm ngược 2 phút Rejoin kích hoạt!")
+-- --- 6. LUỒNG THỰC THI CHÍNH ---
+print("[Main] Script khởi động hoàn tất. Đồng hồ 2 phút Rejoin bắt đầu đếm ngược!")
 interactWithClosestPowerBox()
