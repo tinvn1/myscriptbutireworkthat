@@ -1,8 +1,9 @@
 -- Feel free to adjust
 -- Optimized Custom Mode: Pure Power Box Route (Using Original Crawl Mechanic)
--- Made by TheAnonymous in RScript (Modified)
+-- Original Author: TheAnonymous in RScript
+-- Updated & Optimized by: TinHub Project
 
-print("Loading")
+print("Loading via TinHub Engine")
  
 if not game:IsLoaded() then
     game.Loaded:Wait()
