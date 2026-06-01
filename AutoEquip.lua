@@ -1,7 +1,7 @@
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 local WEAPON_NAME = "Bat" -- Kiểm tra kỹ tên vũ khí xem có đúng là "Bat" không nhé
-local HP_THRESHOLD_PERCENT = 60 -- Chỉ cầm khi dưới 40% HP
+local HP_THRESHOLD_PERCENT = 100
 
 print("[⚔️ SYSTEM] Đang khởi chạy Auto Equip - CHỈ kích hoạt khi dưới 40% HP...");
 
