@@ -1,7 +1,7 @@
 -- Feel free to adjust
 -- Optimized Custom Mode: Pure Power Box Route (Using Original Crawl Mechanic)
 -- Original Author: TheAnonymous in RScript
--- Updated & Optimized by: TinHub Project
+-- Updated & Optimized by: TinHub Project + Auto Hold Integrated
 
 print("Loading via TinHub Engine")
  
@@ -23,11 +23,18 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local Camera = workspace.CurrentCamera
  
 -- --- CONFIGURATION & REFERENCES ---
 local LocalPlayer = Players.LocalPlayer
 local MapFolder = Workspace:FindFirstChild("Map")
 local PermanentNoclipEnabled = true
+
+local OFFSET_DOWN = 20     -- Độ thấp dưới tâm màn hình (pixel)
+local HOLD_DURATION = 19   -- Thời gian giữ (giây)
  
 -- --- EMERGENCY DETECTION RADAR ---
 local function evacuateServer(reason)
@@ -193,23 +200,62 @@ local function runPipeline()
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
         task.wait(0.5)
  
-        -- 3. CƠ CHẾ KÍCH MÁY ĐIỆN NGUYÊN BẢN (AUTO PC & MOBILE)
+        -- 3. CƠ CHẾ KÍCH MÁY ĐIỆN KẾT HỢP AUTO HOLD (PC & MOBILE)
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
-                print("[Pipeline] Tiến hành kích hoạt nút bấm...")
-                for i = 1, 3 do
-                    if fireproximityprompt then
-                        -- Lệnh kích nhanh dành riêng cho PC
-                        fireproximityprompt(prompt)
-                    else
-                        -- Lệnh giữ nút tương thích Mobile vật lý
-                        prompt:InputHoldBegin()
-                        task.wait(prompt.HoldDuration + 0.05)
-                        prompt:InputHoldEnd()
-                    end
-                    task.wait(0.1)
+                print("[Pipeline] Tiến hành kích hoạt nút bấm và giữ...")
+                
+                -- Kiểm tra thiết bị người chơi
+                local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
+                local noticeText = "Bắt đầu giữ dưới tâm 20px trong 19 giây..."
+                if isPC then
+                    noticeText = "Bắt đầu giữ tâm -20px & đè phím [E] trong 19 giây..."
                 end
+
+                StarterGui:SetCore("SendNotification", {
+                    Title = "Auto Hold System",
+                    Text = noticeText,
+                    Duration = 3
+                })
+
+                -- Tính toán tọa độ chính giữa màn hình hạ xuống 20 pixel
+                local centerX = Camera.ViewportSize.X / 2
+                local targetY = (Camera.ViewportSize.Y / 2) + OFFSET_DOWN
+
+                -- [BƯỚC 1]: BẮT ĐẦU ĐÈ GIỮ VÀ CLICK KHÓA VỊ TRÍ
+                VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, true, game, 0)
+                if isPC then
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                end
+
+                -- Đồng thời kích hoạt ProximityPrompt của game theo cơ chế cũ
+                if fireproximityprompt then
+                    fireproximityprompt(prompt)
+                else
+                    prompt:InputHoldBegin()
+                end
+
+                -- [BƯỚC 2]: DUY TRÌ TRẠNG THÁI TRONG 19 GIÂY
+                task.wait(HOLD_DURATION)
+
+                -- [BƯỚC 3]: THẢ RA HOÀN TOÀN
+                VirtualInputManager:SendMouseButtonEvent(centerX, targetY, 0, false, game, 0)
+                if isPC then
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                end
+
+                if not fireproximityprompt then
+                    prompt:InputHoldEnd()
+                end
+
+                -- Thông báo hoàn thành giữ máy điện
+                StarterGui:SetCore("SendNotification", {
+                    Title = "Auto Hold System",
+                    Text = isPC and "Đã thả vị trí và phím [E] thành công!" or "Đã giữ đủ 19 giây và tự động thả!",
+                    Duration = 3
+                })
+
                 print("[Pipeline] Interaction successfully forced!")
                 interactionSuccess = true
             end
@@ -238,9 +284,9 @@ end
 
 runPipeline()
 
--- Watchdog kiểm soát kẹt phòng (60 giây)
+-- Watchdog kiểm soát kẹt phòng (Thêm thời gian chờ vì phải đợi giữ máy điện 19s)
 task.spawn(function()
-    task.wait(60.0) 
+    task.wait(80.0) -- Tăng lên 80 giây để không bị nhảy server quá sớm khi đang giữ máy
     local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
         and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
         and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
