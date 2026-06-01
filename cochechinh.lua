@@ -1,4 +1,4 @@
--- --- 0. KHỞI TẠO VÀ CHỜ GAME TẢI XONG ---
+-- --- 0. KHỔI TẠO VÀ CHỜ GAME TẢI XONG ---
 print("Loading...")
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -8,7 +8,7 @@ local ContentProvider = game:GetService("ContentProvider")
 while ContentProvider.RequestQueueSize > 0 do
     task.wait(0.5)
 end
-task.wait(2.0)
+task.wait(2.0) -- Đợi thêm một chút để đảm bảo map đã dựng xong
 
 -- SERVICES --
 local Workspace = game:GetService("Workspace")
@@ -35,12 +35,14 @@ local function StartPermanentNoclip()
  
             local character = LocalPlayer.Character
             if character then
+                -- Loại bỏ hoàn toàn va chạm của tất cả các bộ phận nhân vật trước khi chu kỳ physics tính toán
                 for _, child in ipairs(character:GetDescendants()) do
                     if child:IsA("BasePart") and child.CanCollide then
                         child.CanCollide = false
                     end
                 end
  
+                -- Triệt tiêu gia tốc/vận tốc gốc để tránh bị chống gian lận giật ngược (Anti-cheat rubberbanding)
                 local hrp = character:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -51,12 +53,14 @@ local function StartPermanentNoclip()
  
     ConnectNoclip()
  
+    -- Tự động áp dụng lại vòng lặp Noclip mỗi khi nhân vật hồi sinh (Respawn)
     LocalPlayer.CharacterAdded:Connect(function()
         task.wait(0.1)
         ConnectNoclip()
     end)
 end
 
+-- Kích hoạt Noclip chạy ngầm ngay khi chạy script
 StartPermanentNoclip()
 print("[Noclip] Đã kích hoạt cơ chế xuyên tường vĩnh viễn!")
 
@@ -74,11 +78,11 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     raycastParams.FilterDescendantsInstances = {character} 
  
-    -- [WATCHDOG THỰC THỤ] Kiểm tra và tự gỡ kẹt tại chỗ
+    -- [WATCHDOG] Cấu hình chống kẹt góc khi di chuyển
     local isMoving = true
     local lastPosition = humanoidRootPart.Position
     local lastMoveTime = os.clock()
-    local STUCK_THRESHOLD = 3 -- 3 giây không dịch chuyển sẽ kích hoạt gỡ kẹt
+    local STUCK_THRESHOLD = 3 -- Tối đa 3 giây đứng im tại chỗ sẽ tự nhảy thẳng tới đích
 
     task.spawn(function()
         while isMoving do
@@ -89,21 +93,13 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
             local distanceMoved = (currentPos - lastPosition).Magnitude
             
             if distanceMoved > 0.5 then
-                -- Nếu vẫn di chuyển mượt thì cập nhật tọa độ liên tục
                 lastPosition = currentPos
                 lastMoveTime = os.clock()
             else
-                -- Nếu phát hiện đứng im quá 3 giây
                 if os.clock() - lastMoveTime >= STUCK_THRESHOLD then
-                    warn("[Watchdog] Phát hiện kẹt góc! Đang tự động gỡ kẹt vật lý...")
-                    
-                    -- BƯỚC 1: Giật lùi/Nhấc nhẹ nhân vật lên để thoát khỏi lưới va chạm bị lỗi
-                    humanoidRootPart.CFrame = humanoidRootPart.CFrame * CFrame.new(0, 2, 2)
-                    task.wait(0.1)
-                    
-                    -- BƯỚC 2: Force thẳng nhân vật đến điểm cuối luôn để không bị đứng chết ở vòng lặp crawl
+                    warn("[Watchdog] Phát hiện bị kẹt góc nặng! Đang Bypass dịch chuyển thẳng tới đích...")
                     humanoidRootPart.CFrame = CFrame.new(finalTarget)
-                    break -- Tháo xích Watchdog của lượt này
+                    break
                 end
             end
         end
@@ -156,12 +152,13 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     isMoving = false
 end
 
--- --- 3. CƠ CHẾ REJOIN ĐỘC LẬP (ĐÚNG 2 PHÚT LÀ ĐỔI SERVER) ---
-local function safeRejoin()
-    print("[System] Hết thời gian hạn định 2 phút! Tiến hành Rejoin sang server mới...")
+-- --- 3. CƠ CHẾ REJOIN (TỰ ĐỘNG ĐỔI SERVER SẠCH) ---
+local function safeRejoin(reason)
+    print("[System] Lý do Rejoin: " .. tostring(reason) .. ". Đang tiến hành đổi server...")
     local TeleportService = game:GetService("TeleportService")
     local LocalPlayer = Players.LocalPlayer
 
+    -- Bỏ qua màn hình thông báo lỗi ngắt kết nối của Roblox nếu có
     local coreGui = game:GetService("CoreGui")
     if coreGui:FindFirstChild("RobloxPromptGui") then
         local prompt = coreGui.RobloxPromptGui.promptOverlay:FindFirstChild("ErrorPrompt")
@@ -170,10 +167,12 @@ local function safeRejoin()
         end
     end
 
+    -- Thực hiện Teleport nhảy server
     pcall(function()
         TeleportService:Teleport(game.PlaceId, LocalPlayer)
     end)
     
+    -- Dự phòng nếu mạng lag, tiếp tục thử lại sau 5 giây
     task.wait(5)
     pcall(function()
         TeleportService:Teleport(game.PlaceId, LocalPlayer)
@@ -189,6 +188,7 @@ local function interactWithClosestPowerBox()
     local powerBoxData = {}
     local interactionSuccess = false
  
+    -- Bước A: Quét toàn bộ map để tìm các model "Power Box" nằm trong "Power Plant"
     if MapFolder and MapFolder:FindFirstChild("Tiles") then
         for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
             if child.Name == "Power Plant" then
@@ -203,6 +203,7 @@ local function interactWithClosestPowerBox()
         end
     end
  
+    -- Bước B: Nếu tìm thấy Box, tiến hành sắp xếp để chọn cái gần nhất
     if #powerBoxData > 0 then
         local currentPos = humanoidRootPart.Position
         table.sort(powerBoxData, function(a, b)
@@ -216,6 +217,7 @@ local function interactWithClosestPowerBox()
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
         task.wait(0.5)
  
+        -- Bước C: Kiểm tra khoảng cách an toàn (< 15 studs) và kích hoạt nút (ProximityPrompt)
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
@@ -241,11 +243,21 @@ local function interactWithClosestPowerBox()
     return interactionSuccess
 end
 
--- --- 5. HẸN GIỜ ÉP REJOIN SAU 2 PHÚT (120 GIÂY) ---
+-- --- 5. HẸN GIỜ ÉP REJOIN DỰ PHÒNG SAU 2 PHÚT (120 GIÂY) ---
 task.delay(120, function()
-    safeRejoin()
+    safeRejoin("Hết thời gian chờ tối đa (2 phút)")
 end)
 
--- --- 6. LUỒNG THỰC THI CHÍNH ---
-print("[Main] Script vận hành. Watchdog gỡ kẹt tại chỗ và Hẹn giờ Rejoin độc lập đã chạy!")
-interactWithClosestPowerBox()
+-- --- 6. LUỒNG THỰC THI CHÍNH VÀ ĐIỀU HƯỚNG TỐT NHẤT ---
+print("[Main] Script khởi động hoàn tất. Tiến hành quét mục tiêu...")
+local completed = interactWithClosestPowerBox()
+
+if completed then
+    print("[Main] Đã hoàn thành xong việc! Chờ 1 giây để đồng bộ phần thưởng rồi Rejoin...")
+    task.wait(1.0)
+    safeRejoin("Hoàn thành tương tác Power Box thành công")
+else
+    print("[Main] Không thể tương tác hoặc không tìm thấy mục tiêu. Đổi server ngay lập tức...")
+    task.wait(0.5)
+    safeRejoin("Thất bại hoặc Không thấy Power Box trên bản đồ")
+end
