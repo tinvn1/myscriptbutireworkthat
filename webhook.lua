@@ -1,12 +1,5 @@
---[[
-    ╔═════════════════════════════════════════════════════════════════╗
-        TINHUB PROJECT - AUTOMATED GEM WATCHDOG SYSTEM (WEBHOOK ONLY)
-        * Original Credits: Developed by TheAnonymous (RScript)
-        * Modified & Updated: Managed under TinHub Cloud Ecosystem
-    ╚═════════════════════════════════════════════════════════════════╝
---]]
 
-print("Loading via TinHub Engine")
+print("Loading via TinHub Engine [Fixed Version]")
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -20,12 +13,9 @@ local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 -- --- CONFIGURATION & REFERENCES ---
-local initialGemValue = 0
-
--- Tìm hàm gửi Request tương thích với MỌI loại Executor (PC + Mobile)
 local requestFunc = json or request or (syn and syn.request) or (http and http.request) or http_request
 
--- Hàm chuyển đổi text Gem sang dạng số để so sánh
+-- Hàm chuyển đổi text Gem sang dạng số
 local function parseGemCount(gemStr)
     local cleaned = string.gsub(gemStr, "[^%d]", "") 
     return tonumber(cleaned) or 0
@@ -57,9 +47,8 @@ local function sendStatusWebhook(isSuccess, currentGemText)
         return
     end
 
-    -- Thiết lập giao diện Embed dựa trên trạng thái dữ liệu Gem
     local title = isSuccess and "🟩 GEM UP SUCCESSFUL 🟩" or "🟥 GEM NOT UP ERROR 🟥"
-    local color = isSuccess and 65280 or 16711680 -- 65280: Xanh Lá | 16711680: Đỏ rực
+    local color = isSuccess and 65280 or 16711680
     local statusDetail = isSuccess and "**Thành công! Số lượng Gem đã tăng lên.**" or "**[ERROR] Gem by game gem not up!**"
 
     local payload = {
@@ -106,20 +95,20 @@ local function sendStatusWebhook(isSuccess, currentGemText)
     end)
 end
 
--- --- MAIN PIPELINE MONITOR ---
+-- --- MAIN PIPELINE MONITOR (SỬA ĐỔI LOGIC KIỂM TRA) ---
 local function startWatchdog()
     if not requestFunc then
-        warn("[TinHub Webhook] Executor này không hỗ trợ bất kỳ hàm gửi Request nào!")
+        warn("[TinHub Webhook] Executor này không hỗ trợ hàm gửi Request!")
         return
     end
 
-    -- 1. Chờ và lấy dữ liệu số lượng Gem gốc ban đầu lúc vào phòng
+    -- Đợi UI Gem xuất hiện
     local gemCountInst = getGemCountInstance()
     local timeout = 0
-    while not gemCountInst and timeout < 15 do
-        task.wait(0.5)
+    while not gemCountInst and timeout < 10 do
+        task.wait(0.2)
         gemCountInst = getGemCountInstance()
-        timeout = timeout + 0.5
+        timeout = timeout + 0.2
     end
 
     if not gemCountInst then
@@ -127,35 +116,57 @@ local function startWatchdog()
         return
     end
 
-    initialGemValue = parseGemCount(gemCountInst.Text)
-    print("[Dữ liệu] Đã ghi nhớ số Gem ban đầu: " .. tostring(initialGemValue))
+    -- Sử dụng biến môi trường toàn cục _G để lưu trữ số lượng Gem thực tế xuyên suốt các phòng (Session)
+    if not _G.TinHub_LastGemValue then
+        _G.TinHub_LastGemValue = parseGemCount(gemCountInst.Text)
+        print("[Dữ liệu] Khởi tạo phiên làm việc. Ghi nhớ gốc: " .. tostring(_G.TinHub_LastGemValue))
+    end
 
-    -- 2. Chạy luồng giám sát dữ liệu liên tục
-    task.spawn(function()
-        local scanTime = 0
-        local maxWaitTime = 12.0 -- Thời gian tối đa (giây) chờ Gem tăng, nếu quá thời gian này mà không tăng thì tính là Lỗi
+    local initialGemValue = _G.TinHub_LastGemValue
+    local hasTriggered = false
 
-        while scanTime < maxWaitTime do
-            task.wait(0.2)
-            scanTime = scanTime + 0.2
+    -- CƠ CHẾ 1: Lắng nghe sự thay đổi trực tiếp của thuộc tính Text (Bắt trọn khoảnh khắc Gem nhảy số)
+    local connection
+    connection = gemCountInst:GetPropertyChangedSignal("Text"):Connect(function()
+        local currentGemValue = parseGemCount(gemCountInst.Text)
+        if currentGemValue > initialGemValue and not hasTriggered then
+            hasTriggered = true
+            _G.TinHub_LastGemValue = currentGemValue -- Cập nhật mốc mới cho phòng sau
+            if connection then connection:Disconnect() end
+            sendStatusWebhook(true, gemCountInst.Text)
+        end
+    end)
 
-            if gemCountInst and gemCountInst.Parent then
-                local currentGemValue = parseGemCount(gemCountInst.Text)
+    -- CƠ CHẾ 2: Kiểm tra đột xuất ngay lập tức (Phòng trường hợp script load chậm khi Gem đã nhảy trước đó)
+    local instantCheck = parseGemCount(gemCountInst.Text)
+    if instantCheck > initialGemValue and not hasTriggered then
+        hasTriggered = true
+        _G.TinHub_LastGemValue = instantCheck
+        if connection then connection:Disconnect() end
+        sendStatusWebhook(true, gemCountInst.Text)
+        return
+    end
 
-                -- TRƯỜNG HỢP 1: Phát hiện Gem TĂNG lên (Thành công)
-                if currentGemValue > initialGemValue then
-                    sendStatusWebhook(true, gemCountInst.Text)
-                    return -- Dừng luồng sau khi đã check xong và gửi webhook Xanh
-                end
+    -- CƠ CHẾ 3: Bộ đếm thời gian bảo hiểm (Watchdog Timeout)
+    task.delay(14.0, function()
+        if not hasTriggered then
+            hasTriggered = true
+            if connection then connection:Disconnect() end
+            
+            -- Đọc lại giá trị cuối cùng trước khi báo lỗi đỏ
+            gemCountInst = getGemCountInstance()
+            local finalGemText = gemCountInst and gemCountInst.Text or "0"
+            local finalGemValue = parseGemCount(finalGemText)
+            
+            if finalGemValue > initialGemValue then
+                -- Cứu nguy phút chót nếu giá trị thực tế lớn hơn mốc lưu trữ ban đầu
+                _G.TinHub_LastGemValue = finalGemValue
+                sendStatusWebhook(true, finalGemText)
             else
-                gemCountInst = getGemCountInstance()
+                print("[⚠️ FAILED] Quá thời gian chờ! Gem thực sự không tăng.")
+                sendStatusWebhook(false, finalGemText)
             end
         end
-
-        -- TRƯỜNG HỢP 2: Đã hết thời gian chờ (12 giây) mà Gem vẫn không tăng (Thất bại)
-        local finalGemText = gemCountInst and gemCountInst.Text or "0"
-        print("[⚠️ FAILED] Quá thời gian chờ kiểm tra dữ liệu! Gem không tăng. Gửi Webhook Đỏ.")
-        sendStatusWebhook(false, finalGemText)
     end)
 end
 
