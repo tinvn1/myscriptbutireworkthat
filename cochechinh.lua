@@ -42,6 +42,10 @@ end
 task.wait(1.5) 
 
 -- CONFIGURATION & REFERENCES --
+local MapFolder = Workspace:FindFirstChild("Map")
+local DroppedItemsFolder = Workspace:WaitForChild("DroppedItems")
+
+local cachedGeneratorLocation = nil
 local PermanentNoclipEnabled = true
 
 -- --- CƠ CHẾ AUTO VOTE REPLAY GỐC TỪ SCRIPT 2 ---
@@ -117,65 +121,104 @@ end
 
 StartPermanentNoclip()
 
--- --- 2. HÀM DI CHUYỂN ADAPTIVE CRAWL (XUYÊN TƯỜNG GỐC) ---
-local function adaptiveCrawlTo(targetPos, hrpPart, characterModel)
-    local finalTarget = targetPos + Vector3.new(0, 3, 0)
-    local FAST_SPEED = 35     
-    local SLOW_SPEED = 10     
-    local STEP_DISTANCE = 0.25  
-    local CLEARANCE_COOLDOWN = 0.5  
-    local lastWallDetectedTime = 0
-    local lockedYHeight = hrpPart.Position.Y
- 
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    raycastParams.FilterDescendantsInstances = {characterModel} 
- 
-    local isMoving = true
-    local lastPosition = hrpPart.Position
-    local lastMoveTime = os.clock()
-    local STUCK_THRESHOLD = 3 
+-- --- LOGIC TÌM KIẾM VỊ TRÍ FUEL GỐC ---
+local excludeFuel = {}
 
-    task.spawn(function()
-        while isMoving do
-            task.wait(0.5)
-            if not hrpPart or not hrpPart.Parent then break end
-            
-            local currentPos = hrpPart.Position
-            local distanceMoved = (currentPos - lastPosition).Magnitude
-            
-            if distanceMoved > 0.5 then
-                lastPosition = currentPos
-                lastMoveTime = os.clock()
-            else
-                if os.clock() - lastMoveTime >= STUCK_THRESHOLD then
-                    warn("[Watchdog] Phát hiện kẹt map! Dịch chuyển thẳng tới vị trí đích...")
-                    hrpPart.CFrame = CFrame.new(finalTarget)
-                    break
+local function getClosestFuelPosition(currentPos)
+    local foundValidFuel = nil
+    
+    while not foundValidFuel do
+        local bestTarget = nil
+        local shortestDistance = math.huge
+        
+        if DroppedItemsFolder then
+            for _, item in ipairs(DroppedItemsFolder:GetChildren()) do
+                if item.Name == "Fuel" then
+                    if not excludeFuel[item] then
+                        local fuelPos = item:GetPivot().Position
+                        local dist = (currentPos - fuelPos).Magnitude
+                        
+                        if dist < shortestDistance then
+                            shortestDistance = dist
+                            bestTarget = item
+                        end
+                    end
                 end
             end
         end
-    end)
- 
-    while true do
-        if not hrpPart or not hrpPart.Parent then 
-            isMoving = false
-            break 
+        
+        if not bestTarget then
+            break
         end
         
-        local currentPos = hrpPart.Position
+        local targetPosition = bestTarget:GetPivot().Position
+        local heightDifference = targetPosition.Y - currentPos.Y
+        
+        if heightDifference <= 2 then
+            foundValidFuel = bestTarget
+        else
+            print("[-] Fuel anomaly detected at height: " .. tostring(targetPosition.Y) .. ". Excluding item.")
+            excludeFuel[bestTarget] = true
+        end
+    end
+    
+    return foundValidFuel
+end
+
+-- --- LOGIC TÌM VỊ TRÍ MÁY GEN ---
+local function getGeneratorPosition()
+    if cachedGeneratorLocation then return cachedGeneratorLocation end
+    if MapFolder then
+        local tiles = MapFolder:FindFirstChild("Tiles")
+        if tiles then
+            for _, child in ipairs(tiles:GetChildren()) do
+                if child.Name == "Generator" or child:FindFirstChild("Generator") then
+                    cachedGeneratorLocation = child:GetPivot().Position
+                    return cachedGeneratorLocation
+                end
+            end
+        end
+    end
+    local fallbackGen = Workspace:FindFirstChild("Generator", true)
+    if fallbackGen then
+        cachedGeneratorLocation = fallbackGen:GetPivot().Position
+        return cachedGeneratorLocation
+    end
+    return nil
+end
+
+-- --- 2. HÀM DI CHUYỂN ADAPTIVE CRAWL LẤY TỪ SCRIPT 2 (HOÀN TOÀN KHÔNG ĐỔI) ---
+local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
+    local finalTarget = targetPos + Vector3.new(0, 3, 0)
+ 
+    local FAST_SPEED = 35     
+    local SLOW_SPEED = 10     
+    local STEP_DISTANCE = 0.25 
+ 
+    local CLEARANCE_COOLDOWN = 0.5 
+    local lastWallDetectedTime = 0
+ 
+    local lockedYHeight = humanoidRootPart.Position.Y
+ 
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {character} 
+ 
+    while true do
+        if not humanoidRootPart or not humanoidRootPart.Parent then break end
+        local currentPos = humanoidRootPart.Position
         local flatTarget = Vector3.new(finalTarget.X, lockedYHeight, finalTarget.Z)
         local remainingVector = flatTarget - currentPos
         local totalDistance = remainingVector.Magnitude
  
         if totalDistance <= 2 or totalDistance <= STEP_DISTANCE then
-            hrpPart.CFrame = CFrame.new(finalTarget)
-            hrpPart.AssemblyLinearVelocity = Vector3.new(0, -5, 0) 
-            hrpPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-            hrpPart.Anchored = true
+            humanoidRootPart.CFrame = CFrame.new(finalTarget)
+            humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, -5, 0) 
+            humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+ 
+            humanoidRootPart.Anchored = true
             task.wait(0.05)
-            hrpPart.Anchored = false 
-            isMoving = false
+            humanoidRootPart.Anchored = false 
             break
         end
  
@@ -198,18 +241,49 @@ local function adaptiveCrawlTo(targetPos, hrpPart, characterModel)
         local nextPosition = currentPos + (direction * activeStepDistance)
         local flattenedPosition = Vector3.new(nextPosition.X, lockedYHeight, nextPosition.Z)
  
-        hrpPart.CFrame = CFrame.new(flattenedPosition)
+        humanoidRootPart.CFrame = CFrame.new(flattenedPosition)
         task.wait(delayInterval)
     end
-    isMoving = false
 end
 
--- --- 4. CƠ CHẾ TƯƠNG TÁC VÀ KÍCH HOẠT REPLAY LUÔN KHI XONG ---
-local function interactWithClosestPowerBox()
+-- --- 4. LUỒNG THỰC THI PIPELINE THEO LỘ TRÌNH CHI TIẾT ---
+local function runPipeline()
     local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local hrpPart = char:WaitForChild("HumanoidRootPart")
-    local MapFolder = Workspace:FindFirstChild("Map")
-    
+ 
+    print("[Pipeline] Khởi chạy chu trình lộ trình tuần tự...")
+    task.wait(0.3)
+ 
+    -- BƯỚC 1: Di chuyển tới vị trí Cục Fuel thứ nhất -> Dừng 0.5s
+    local fuelOne = getClosestFuelPosition(hrpPart.Position)
+    if fuelOne then
+        print("[Lộ trình 1/4] Đang di chuyển tới Fuel 1...")
+        adaptiveCrawlTo(fuelOne:GetPivot().Position, hrpPart, char)
+        excludeFuel[fuelOne] = true -- Loại trừ cục này để bước tiếp theo không đi lại
+        task.wait(0.5)
+    end
+ 
+    -- BƯỚC 2: Di chuyển tới vị trí Cục Fuel thứ hai -> Dừng 0.5s
+    local fuelTwo = getClosestFuelPosition(hrpPart.Position)
+    if fuelTwo then
+        print("[Lộ trình 2/4] Đang di chuyển tới Fuel 2...")
+        adaptiveCrawlTo(fuelTwo:GetPivot().Position, hrpPart, char)
+        excludeFuel[fuelTwo] = true
+        task.wait(0.5)
+    end
+ 
+    -- BƯỚC 3: Di chuyển tới Máy Phát Điện (Generator) -> Dừng 0.5s
+    local generatorPos = getGeneratorPosition()
+    if generatorPos then
+        print("[Lộ trình 3/4] Đang di chuyển tới Máy Phát Điện (Generator)...")
+        adaptiveCrawlTo(generatorPos, hrpPart, char)
+        task.wait(0.5)
+    else
+        warn("[Warning] Không tìm thấy máy Gen, bỏ qua bước trung gian.")
+    end
+ 
+    -- BƯỚC 4: Quét trạm điện (Power Box) gần nhất và tiến hành sửa máy
+    print("[Lộ trình 4/4] Quét trạm điện gần nhất trên bản đồ...")
     local powerBoxData = {}
  
     if MapFolder and MapFolder:FindFirstChild("Tiles") then
@@ -235,38 +309,39 @@ local function interactWithClosestPowerBox()
         local chosenBox = powerBoxData[1].Instance
         local finalBoxTarget = powerBoxData[1].Position
  
-        print("[PowerBox] Tiến hành di chuyển xuyên tường tới Power Box...")
+        print("[Hành động] Di chuyển xuyên tường thẳng tới Power Box mục tiêu.")
         adaptiveCrawlTo(finalBoxTarget, hrpPart, char)
-        
+        task.wait(0.5)
+ 
         if (hrpPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
-                print("[PowerBox] Đang thực hiện kích hoạt nút sửa máy...")
-                
-                if fireproximityprompt then
-                    fireproximityprompt(prompt)
-                else
-                    prompt:InputHoldBegin()
-                    task.wait(prompt.HoldDuration + 0.02)
-                    prompt:InputHoldEnd()
+                print("[Hành động] Tiến hành tương tác sửa máy...")
+                for i = 1, 3 do
+                    if fireproximityprompt then
+                        fireproximityprompt(prompt)
+                    else
+                        prompt:InputHoldBegin()
+                        task.wait(prompt.HoldDuration + 0.05)
+                        prompt:InputHoldEnd()
+                    end
+                    task.wait(0.1)
                 end
                 
-                -- CHỈ VOTE REPLAY LẬP TỨC KHÔNG KICK/TELEPORT THỦ CÔNG
-                print("[PowerBox] Sửa máy thành công! Đang kích hoạt Vote Chơi Lại...")
-                forceVotePlayAgain("Hoàn thành sửa máy (Power Box)")
+                print("[Pipeline] Hoàn thành sửa máy! Kích hoạt Vote Chơi Lại...")
+                forceVotePlayAgain("Hoàn tất toàn bộ chu trình lộ trình thành công")
             end
         end
     else
-        warn("[PowerBox] Hiện tại không tìm thấy Power Box nào. Kích hoạt Vote đổi phòng...")
+        warn("[PowerBox] Không tìm thấy Power Box nào trên bản đồ. Kích hoạt Vote đổi phòng...")
         forceVotePlayAgain("Không tìm thấy Power Box trên bản đồ")
     end
 end
 
--- --- 5. BẢO HIỂM WATCHDOG ĐÚNG 60 GIÂY THEO SCRIPT 2 ---
+-- --- 5. BẢO HIỂM WATCHDOG ĐÚNG 60 GIÂY ---
 task.delay(60, function()
     forceVotePlayAgain("Quá thời gian quy định cho một lượt farm (Watchdog Timeout 60s)")
 end)
 
--- --- 6. LUỒNG THỰC THI CHÍNH ---
-print("[Main] Khởi chạy chu trình sửa máy...")
-interactWithClosestPowerBox()
+-- --- 6. KHỞI CHẠY CHƯƠNG TRÌNH ---
+runPipeline()
