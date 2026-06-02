@@ -1,436 +1,248 @@
--- Made by TheAnonymous in RScript / Theultimateuser in Scriptblox
+print("[SYSTEM] Initiating Underground Tunneling Physical Core... Dynamic Height Control.") [cite: 1]
+task.wait(3) [cite: 1]
 
--- Feel free to adjust
--- The ultimate solo gem farming (Slapped some stuff with AI so no hate :) )
--- Remember to put this into auto-execution folder or smth, each run is completed in around 25-35 seconds so 2-2.4 gems/min
--- This is FREE and KEYLESS
--- You shall not copy this code and add key system on top of it for pure greediness. Don't be like Racky in Rscript where he tries to make money off from mine without adding new stuff LOL (seriously, add some unique stuff that makes it worth the trouble)
--- You can modify it and give credits, it's fine :PP
+local Workspace = game:GetService("Workspace") [cite: 1]
+local RunService = game:GetService("RunService") [cite: 1]
+local Players = game:GetService("Players") [cite: 1]
+local localPlayer = Players.LocalPlayer [cite: 1]
 
--- The script works like this: finds two fuels to upgrade the generator -> go fix the closest power plant (main way to get gem)
-print("Loading")
- 
-if not game:IsLoaded() then
-    game.Loaded:Wait()
-end
- 
-local ContentProvider = game:GetService("ContentProvider")
-while ContentProvider.RequestQueueSize > 0 do
-    task.wait(0.5)
-end
- 
-print("The game is loaded in. Wait more for things to fully load")
--- This is based on your pings so the finding fuel function doesn't break (adjust it to your liking)
-task.wait(6.0)
-print("Complete! Starting the farm.")
- 
- 
--- SERVICES --
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService") -- Thêm dịch vụ Tween
- 
--- --- CONFIGURATION & REFERENCES ---
-local LocalPlayer = Players.LocalPlayer
-local MapFolder = Workspace:FindFirstChild("Map")
-local DroppedItemsFolder = Workspace:WaitForChild("DroppedItems")
-local AdjustBackpackRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Tools"):WaitForChild("AdjustBackpack")
- 
-local cachedGeneratorLocation = nil
-local PermanentNoclipEnabled = true
- 
--- --- Safety First Lads You gotta be the sneakiest to be the ultimate gem grinder ---
-local function evacuateServer(reason)
-    warn("[CRITICAL EVACUATION]: " .. reason)
-    task.spawn(function()
-        local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
-            and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
-            and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
+local PermanentNoclipEnabled = true [cite: 1]
 
-        if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
-            pcall(function()
-                PlayAgainRemote:FireServer()
-            end)
-            print("ESCAPING BY PLAYING AGAIN")
-            task.wait(1.0) -- Waiting for the remote to work
-        end
-        
-        -- 2. Forceful escape by getting kicked if the remote is slow as heck
-        LocalPlayer:Kick("[WARNING] UNKNOWN PLAYER DETECTED!")
-    end)
+-- =========================================================================
+-- 🟩 1. BACKGROUND SERVICE: PERMANENT NOCLIP ENGINE
+-- =========================================================================
+local function StartPermanentNoclip() [cite: 1]
+    local noclipConnection = nil [cite: 1]
+
+    local function ConnectNoclip() [cite: 1]
+        if noclipConnection then noclipConnection:Disconnect() end [cite: 1]
+
+        noclipConnection = RunService.Stepped:Connect(function() [cite: 1]
+            if not PermanentNoclipEnabled then [cite: 1]
+                if noclipConnection then noclipConnection:Disconnect() end [cite: 2]
+                return [cite: 2]
+            end [cite: 2]
+
+            local character = localPlayer.Character [cite: 2]
+            if character then [cite: 2]
+                for _, child in ipairs(character:GetDescendants()) do [cite: 2]
+                    if child:IsA("BasePart") and child.CanCollide then [cite: 3]
+                        child.CanCollide = false [cite: 3]
+                    end [cite: 3]
+                end [cite: 3]
+            end [cite: 2]
+        end) [cite: 1]
+    end [cite: 1]
+
+    ConnectNoclip() [cite: 1]
     
-	-- Stops the script immediately
-    error("Script execution terminated.")
+    localPlayer.CharacterAdded:Connect(function() [cite: 4]
+        task.wait(0.2) [cite: 4]
+        ConnectNoclip() [cite: 4]
+    end) [cite: 4]
+end [cite: 1]
+
+StartPermanentNoclip() [cite: 1]
+
+-- =========================================================================
+-- 🟩 2. UNDERGROUND PHYSICAL GLIDE ENGINE
+-- =========================================================================
+local function executePhysicalStage(subTarget, speed, character, humanoidRootPart, stopDistance)
+    stopDistance = stopDistance or 2.0 -- Mặc định là 2 studs [cite: 5]
+
+    local lastPosition = humanoidRootPart.Position [cite: 4]
+    local lastMoveTime = os.clock() [cite: 4]
+    local isStuck = false [cite: 4]
+
+    local raycastParams = RaycastParams.new() [cite: 4]
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude [cite: 4]
+    raycastParams.FilterDescendantsInstances = {character} [cite: 4]
+
+    while true do [cite: 4]
+        if not humanoidRootPart or not humanoidRootPart.Parent then break end [cite: 4]
+        
+        local currentPos = humanoidRootPart.Position [cite: 4]
+        local remainingVector = subTarget - currentPos [cite: 4]
+        local distance = remainingVector.Magnitude [cite: 4]
+
+        -- ĐẠT ĐẾN KHOẢNG CÁCH YÊU CẦU THÌ DỪNG CHẶNG
+        if distance <= stopDistance then
+            humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0) [cite: 5]
+            break [cite: 5]
+        end
+
+        -- Bộ lọc chống kẹt cứng địa hình [cite: 6]
+        if (currentPos - lastPosition).Magnitude > 0.15 then [cite: 6]
+            lastPosition = currentPos [cite: 6]
+            lastMoveTime = os.clock() [cite: 6]
+        else [cite: 6]
+            if os.clock() - lastMoveTime >= 3.5 then [cite: 6]
+                isStuck = true [cite: 7]
+                break [cite: 7]
+            end [cite: 6]
+        end [cite: 6]
+
+        local direction = remainingVector.Unit [cite: 7]
+
+        -- Kiểm tra vật cản (Đất/Sàn) để tinh chỉnh vận tốc thích hợp [cite: 7]
+        local rayResult = Workspace:Raycast(currentPos, direction * 4, raycastParams) [cite: 7]
+        local currentAllowedSpeed = speed [cite: 7]
+        if rayResult and rayResult.Instance and rayResult.Instance.CanCollide then [cite: 8]
+            currentAllowedSpeed = 4.0 -- Ép đi cực chậm khi đang xuyên qua lớp vỏ bản đồ / nền đất dày [cite: 8]
+        end [cite: 8]
+
+        -- Bơm thẳng lực vận tốc 3D [cite: 8]
+        humanoidRootPart.AssemblyLinearVelocity = direction * currentAllowedSpeed [cite: 8]
+        humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0) [cite: 8]
+        humanoidRootPart.CFrame = CFrame.new(currentPos, subTarget) [cite: 9]
+
+        RunService.Heartbeat:Wait() [cite: 9]
+    end [cite: 9]
+
+    if isStuck then [cite: 9]
+        humanoidRootPart.CFrame = CFrame.new(subTarget) [cite: 9]
+    end [cite: 9]
 end
 
--- Checking if there is mod already joined
-if #Players:GetPlayers() > 1 then
-    evacuateServer("Pre-existing player DETECTED!")
+-- =========================================================================
+-- 🟩 3. CORE TUNNELING CONTROLLER
+-- =========================================================================
+local function moveWithUndergroundTunnel(targetPos, humanoidRootPart, character, onReached6Studs)
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid") [cite: 9]
+    local finalTarget = targetPos + Vector3.new(0, 3, 0) [cite: 9]
+    
+    local CRUISE_SPEED = 26     -- Tốc độ lướt ngầm dưới lòng đất công cộng [cite: 9]
+    local DIG_DEPTH = 35        -- Độ sâu đục xuống dưới sàn (35 studs) [cite: 10]
+
+    -- Vô hiệu hóa trọng lực nội tại thông qua Humanoid State [cite: 10]
+    if humanoid then [cite: 10]
+        humanoid.PlatformStand = true [cite: 10]
+        humanoid:ChangeState(Enum.HumanoidStateType.Physics) [cite: 10]
+    end [cite: 10]
+    
+    -- Kích hoạt VectorForce triệt tiêu hoàn toàn Gravity của bản đồ [cite: 10]
+    local attachment = Instance.new("Attachment") [cite: 10]
+    attachment.Parent = humanoidRootPart [cite: 10]
+    
+    local vectorForce = Instance.new("VectorForce") [cite: 11]
+    vectorForce.Attachment0 = attachment [cite: 11]
+    vectorForce.Force = Vector3.new(0, Workspace.Gravity * humanoidRootPart:GetMass(), 0) [cite: 11]
+    vectorForce.RelativeTo = Enum.ActuatorRelativeTo.World [cite: 11]
+    vectorForce.Parent = humanoidRootPart [cite: 11]
+
+    local startPos = humanoidRootPart.Position [cite: 11]
+
+    -- 🔽 GIAI ĐOẠN 1: Đục thẳng đứng xuống dưới lòng đất [cite: 11]
+    print("[Tunnel] Phase 1: Digging vertically downward...") [cite: 11]
+    local stage1_Target = Vector3.new(startPos.X, startPos.Y - DIG_DEPTH, startPos.Z) [cite: 11]
+    executePhysicalStage(stage1_Target, 15, character, humanoidRootPart, 2.0) [cite: 11]
+    task.wait(0.05) [cite: 11]
+
+    -- ↔️ GIAI ĐOẠN 2: Di chuyển ngang tốc độ cao [cite: 11]
+    print("[Tunnel] Phase 2: Traveling horizontally underground...") [cite: 11]
+    local stage2_Target = Vector3.new(finalTarget.X, startPos.Y - DIG_DEPTH, finalTarget.Z) [cite: 12]
+    executePhysicalStage(stage2_Target, CRUISE_SPEED, character, humanoidRootPart, 2.0) [cite: 12]
+    task.wait(0.05) [cite: 12]
+
+    -- 🔼 GIAI ĐOẠN 3: Chồi thẳng đứng lên - DỪNG CHÍNH XÁC KHI CÁCH 6 STUDS
+    print("[Tunnel] Phase 3: Popping up... Stopping early at 6 studs.") [cite: 12]
+    executePhysicalStage(finalTarget, 15, character, humanoidRootPart, 6.0) -- Phanh lại khi cách mục tiêu 6 studs
+
+    -- 🔥 GỌI SCRIPT TIẾP THEO NGAY LẬP TỨC THÔNG QUA HÀM BẤT ĐỒNG BỘ
+    if onReached6Studs then
+        task.spawn(onReached6Studs)
+    end
+
+    -- [TIẾP TỤC CHẠY HẾT CODE CŨ]: Nhích nốt quãng đường còn lại để hoàn thành tương tác cũ
+    executePhysicalStage(finalTarget, 10, character, humanoidRootPart, 1.5)
+
+    -- 🧼 DỌN DẸP HỆ THỐNG VẬT LÝ SAU KHI TIẾP CẬN THÀNH CÔNG [cite: 12]
+    vectorForce:Destroy() [cite: 12]
+    attachment:Destroy() [cite: 13]
+    if humanoid then [cite: 13]
+        humanoid.PlatformStand = false [cite: 13]
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) [cite: 13]
+    end [cite: 13]
+
+    -- Khóa vị trí tuyệt đối để triệt tiêu quán tính rò rỉ [cite: 13]
+    humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0) [cite: 13]
+    humanoidRootPart.CFrame = CFrame.new(finalTarget) [cite: 13]
+    humanoidRootPart.Anchored = true [cite: 13]
+    task.wait(0.05) [cite: 13]
+    humanoidRootPart.Anchored = false [cite: 13]
 end
--- Hook live background radar listener for immediate exit on mid-game arrivals
-Players.PlayerAdded:Connect(function(newPlayer)
-    if newPlayer ~= LocalPlayer then
-        evacuateServer("Player entry detected (" .. newPlayer.Name .. "). Executing immediate escape.")
-    end
-end)
- 
--- --- BACKGROUND SERVICE: PERMANENT NOCLIP ENGINE (GIỮ NGUYÊN BẢN 100%) ---
-local function StartPermanentNoclip()
-    local noclipConnection = nil
- 
-    local function ConnectNoclip()
-        if noclipConnection then noclipConnection:Disconnect() end
- 
-        noclipConnection = RunService.Stepped:Connect(function()
-            if not PermanentNoclipEnabled then
-                if noclipConnection then noclipConnection:Disconnect() end
-                return
-            end
- 
-            local character = LocalPlayer.Character
-            if character then
-                -- Instantly strips all collisions before physics steps process
-                for _, child in ipairs(character:GetDescendants()) do
-                    if child:IsA("BasePart") and child.CanCollide then
-                        child.CanCollide = false
-                    end
-                end
- 
-                -- Zeroes velocity to stop anti-cheat rubberbanding
-                local hrp = character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                end
-            end
-        end)
-    end
- 
-    ConnectNoclip()
- 
-    -- Re-applies the permanent noclip loop whenever you respawn
-    LocalPlayer.CharacterAdded:Connect(function()
+
+-- =========================================================================
+-- 🟩 4. PIPELINE EXECUTION ENGINE
+-- =========================================================================
+local function runPowerBoxPipeline()
+    local character = localPlayer.Character or localPlayer.CharacterAdded:Wait() [cite: 13]
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart") [cite: 14]
+
+    local powerBoxData = {} [cite: 14]
+
+    local function ScanDirectory(root) [cite: 14]
+        if not root then return end [cite: 14]
+        for _, child in ipairs(root:GetDescendants()) do [cite: 14]
+            if child.Name == "Power Box" and child:IsA("Model") then [cite: 14]
+                table.insert(powerBoxData, { [cite: 14]
+                    Instance = child, [cite: 14]
+                    Position = child:GetPivot().Position [cite: 15]
+                }) [cite: 14]
+            end [cite: 14]
+        end [cite: 14]
+    end [cite: 14]
+
+    local MapFolder = Workspace:FindFirstChild("Map") [cite: 15]
+    if MapFolder then ScanDirectory(MapFolder) else ScanDirectory(Workspace) end [cite: 15]
+
+    if #powerBoxData > 0 then [cite: 15]
+        local currentPos = humanoidRootPart.Position [cite: 15]
+        table.sort(powerBoxData, function(a, b) [cite: 16]
+            return (currentPos - a.Position).Magnitude < (currentPos - b.Position).Magnitude [cite: 16]
+        end) [cite: 16]
+
+        local chosenBox = powerBoxData[1].Instance [cite: 16]
+        local finalBoxTarget = powerBoxData[1].Position [cite: 16]
+
+        print("[Pipeline] Executing Underground Tunnel Core...") [cite: 16]
+
+        -- Định nghĩa kịch bản tiếp theo sẽ chạy khi đạt khoảng cách 6 studs
+        local function ThucHienScriptTiepTheo()
+            print("[Trigger] ĐÃ ĐẠT 6 STUDS! Đang kích hoạt chạy script tiếp theo...")
+            
+            -------------------------------------------------------------
+            -- 💡 DÁN CODE CỦA SCRIPT TIẾP THEO CỦA BẠN DƯỚI ĐÂY:
+            -------------------------------------------------------------
+            -- Ví dụ: loadstring(game:HttpGet("link_script.lua"))()
+            
+        end
+
+        -- Gọi hàm di chuyển ngầm, truyền kèm theo hành động chạy script tiếp theo
+        moveWithUndergroundTunnel(finalBoxTarget, humanoidRootPart, character, ThucHienScriptTiepTheo) [cite: 16]
         task.wait(0.1)
-        ConnectNoclip()
-    end)
-end
 
-StartPermanentNoclip()
- 
--- Find the closest fuel's location
-local excludeFuel = {}
+        -- Kích hoạt ProximityPrompt (Code gốc vẫn chạy để hoàn thành tương tác) [cite: 17]
+        if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then [cite: 17]
+            local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true) [cite: 17]
+            if prompt then [cite: 17]
+                print("[Pipeline] Interacting with Power Box...") [cite: 17]
+                for i = 1, 3 do [cite: 17]
+                    if fireproximityprompt then [cite: 18]
+                        fireproximityprompt(prompt) [cite: 18]
+                    else [cite: 18]
+                        prompt:InputHoldBegin() [cite: 18]
+                        task.wait(prompt.HoldDuration + 0.05) [cite: 19]
+                        prompt:InputHoldEnd() [cite: 19]
+                    end [cite: 18]
+                    task.wait(0.1) [cite: 19]
+                end [cite: 19]
+                print("[Pipeline] Interaction successfully completed!") [cite: 20]
+            end [cite: 17]
+        end [cite: 17]
+    else [cite: 20]
+        warn("[Warning] No valid Power Box found on the map.") [cite: 20]
+    end [cite: 20]
+end [cite: 20]
 
-local function getClosestFuelPosition(currentPos)
-    local foundValidFuel = nil
-    
-    -- This loop will continuously retry until a valid item is found or none remain
-    while not foundValidFuel do
-        local bestTarget = nil
-        local shortestDistance = math.huge
-        
-        if DroppedItemsFolder then
-            for _, item in ipairs(DroppedItemsFolder:GetChildren()) do
-                if item.Name == "Fuel" then
-                    -- Check if this is in the exclusion table
-                    if not excludeFuel[item] then
-                        local fuelPos = item:GetPivot().Position
-                        local dist = (currentPos - fuelPos).Magnitude
-                        
-                        -- Track the temporary closest item for this specific scan cycle
-                        if dist < shortestDistance then
-                            shortestDistance = dist
-                            bestTarget = item
-                        end
-                    end
-                end
-            end
-        end
-        
-        -- If no good fuel exist, uh we exit and everything breaks but this ain't happening I'm sure
-        if not bestTarget then
-            break
-        end
-        
-        -- Checking if the fuel is on top of a tall object to ignore
-        local targetPosition = bestTarget:GetPivot().Position
-        local heightDifference = targetPosition.Y - currentPos.Y
-        
-        if heightDifference <= 2 then
-            -- CRITERIA MET: Assign the item to exit the retry loop successfully
-            foundValidFuel = bestTarget
-        else
-            -- CRITERIA FAILED: Add this specific item instance to the exclusion table
-            print("[-] Fuel anomaly detected at height: " .. tostring(targetPosition.Y) .. ". Excluding item.")
-            excludeFuel[bestTarget] = true
-        end
-    end
-    
-    -- Returns the item instance (or nil if the map is empty) to prevent unassigned runtime exceptions
-    return foundValidFuel
-end
- 
-local function getGeneratorPosition()
-    if cachedGeneratorLocation then return cachedGeneratorLocation end
-    if MapFolder then
-        local tiles = MapFolder:FindFirstChild("Tiles")
-        if tiles then
-            for _, child in ipairs(tiles:GetChildren()) do
-                if child.Name == "Generator" or child:FindFirstChild("Generator") then
-                    cachedGeneratorLocation = child:GetPivot().Position
-                    return cachedGeneratorLocation
-                end
-            end
-        end
-    end
-    local fallbackGen = Workspace:FindFirstChild("Generator", true)
-    if fallbackGen then
-        cachedGeneratorLocation = fallbackGen:GetPivot().Position
-        return cachedGeneratorLocation
-    end
-    return nil
-end
-
--- The more overpowered version, it can literally teleport fuel to the generator (People gonna skid this thing hard trust me)
-local function FuelTeleport(hrp, targetFuel)
-    local generatorLoc = getGeneratorPosition()
-    if not hrp or not targetFuel or not generatorLoc then return end
-
-    local fuelUnion = targetFuel:FindFirstChild("Union") or targetFuel.PrimaryPart
-    local itemDrag = targetFuel:FindFirstChild("ItemDrag")
-    local networkRemote = itemDrag and itemDrag:FindFirstChild("RequestNetworkOwnership")
-
-    if fuelUnion and networkRemote then
-        -- Hippity Hoppity the fuel is now my property
-        pcall(function()
-            networkRemote:FireServer(fuelUnion)
-        end)
-        
-        -- small delay so it doesn't blow up
-        task.wait(0.12) 
-
-        -- Instantly teleport item directly to the generator
-        pcall(function()
-            targetFuel:PivotTo(CFrame.new(generatorLoc) + Vector3.new(0, 1, 0))
-        end)
-        
-        -- small delay so it doesn't blow up
-        task.wait(0.15) 
-    end
-end
-
-
- 
--- TRAVEL COMPONENT (CƠ CHẾ MOVETO GỐC ĐỂ DI CHUYỂN NGANG)
-local function adaptiveCrawlTo(targetPos, humanoidRootPart, character, customYHeight)
-    local finalTarget = targetPos + Vector3.new(0, 3, 0)
- 
-    local FAST_SPEED = 35     
-    local SLOW_SPEED = 10     
-    local STEP_DISTANCE = 0.25 
- 
-    local CLEARANCE_COOLDOWN = 0.5 
-    local lastWallDetectedTime = 0
- 
-    -- Nếu truyền vào chiều cao custom (khi đang ở dưới lòng đất), dùng nó để cố định trục Y
-    local lockedYHeight = customYHeight or humanoidRootPart.Position.Y
- 
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-    raycastParams.FilterDescendantsInstances = {character} 
- 
-    while true do
-        if not humanoidRootPart or not humanoidRootPart.Parent then break end
-        local currentPos = humanoidRootPart.Position
-        local flatTarget = Vector3.new(finalTarget.X, lockedYHeight, finalTarget.Z)
-        local remainingVector = flatTarget - currentPos
-        local totalDistance = remainingVector.Magnitude
- 
-        if totalDistance <= 2 or totalDistance <= STEP_DISTANCE then
-            -- Khi kết thúc, nếu có Y custom thì giữ nguyên Y dưới lòng đất
-            local targetPosition = customYHeight and Vector3.new(finalTarget.X, customYHeight, finalTarget.Z) or finalTarget
-            humanoidRootPart.CFrame = CFrame.new(targetPosition)
-            humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, -5, 0) 
-            humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
- 
-            humanoidRootPart.Anchored = true
-            task.wait(0.05)
-            humanoidRootPart.Anchored = false 
-            break
-        end
- 
-        local direction = remainingVector.Unit
-        local lookAheadDistance = 5
-        local rayResult = Workspace:Raycast(currentPos, direction * lookAheadDistance, raycastParams)
- 
-        if rayResult and rayResult.Instance and rayResult.Instance.CanCollide then
-            lastWallDetectedTime = os.clock()
-        end
- 
-        local activeStepDistance = 0.25 
-        local currentAllowedSpeed = SLOW_SPEED
-        if os.clock() - lastWallDetectedTime >= CLEARANCE_COOLDOWN then
-            activeStepDistance = 1.4  
-            currentAllowedSpeed = FAST_SPEED
-        end
- 
-        local delayInterval = activeStepDistance / currentAllowedSpeed
-        local nextPosition = currentPos + (direction * activeStepDistance)
-        local flattenedPosition = Vector3.new(nextPosition.X, lockedYHeight, nextPosition.Z)
- 
-        humanoidRootPart.CFrame = CFrame.new(flattenedPosition)
-        task.wait(delayInterval)
-    end
-end
-
--- --- HÀM TWEEN PHỤ TRỢ (CHỈ DÙNG ĐỂ ĐỤC THẲNG ĐỨNG XUỐNG VÀ LÊN) ---
-local function tweenVertically(targetCFrame, speed, humanoidRootPart)
-    local distance = (humanoidRootPart.Position - targetCFrame.Position).Magnitude
-    local duration = distance / speed
-    if duration <= 0 then return end
-    
-    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
-    local tween = TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = targetCFrame})
-    
-    humanoidRootPart.Anchored = true
-    tween:Play()
-    tween.Completed:Wait()
-    humanoidRootPart.Anchored = false
-end
- 
--- --- PIPELINE EXECUTION ENGINE ---
-local function runPipeline()
-    print("Free and Keyless, script is in https://pastebin.com/V0wHqZe4")
-    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
- 
-    print("[Pipeline] Initiating Complete Sequence...")
-    task.wait(0.3)
- 
-    -- STEP 1: Nearest Fuel Remote Teleport
-    local fuelOne = getClosestFuelPosition(humanoidRootPart.Position)
-    if fuelOne then
-        print("[Step 1] Moving to first closest fuel.")
-        adaptiveCrawlTo(fuelOne:GetPivot().Position, humanoidRootPart, character)
-        task.wait(0.3)
-        FuelTeleport(humanoidRootPart, fuelOne)
-        task.wait(0.5)
-    end
- 
-    -- STEP 2: Second Nearest Fuel Remote Teleport
-    local fuelTwo = getClosestFuelPosition(humanoidRootPart.Position)
-    if fuelTwo then
-        print("[Step 2] Moving to second closest fuel.")
-        adaptiveCrawlTo(fuelTwo:GetPivot().Position, humanoidRootPart, character)
-        task.wait(0.3)
-        FuelTeleport(humanoidRootPart, fuelTwo)
-        task.wait(0.5)
-    end
- 
-    -- STEP 3: MECHANISM INTEGRATION (TWEEN DOWN 30 STUDS -> MOVETO INTERNALLY -> TWEEN UP)
-    print("[Step 3] Scanning for closest Power Box model...")
-    local powerBoxData = {}
-    local interactionSuccess = false
- 
-    if MapFolder and MapFolder:FindFirstChild("Tiles") then
-        for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
-            if child.Name == "Power Plant" then
-                local powerBox = child:FindFirstChild("Power Box")
-                if powerBox and powerBox:IsA("Model") then
-                    table.insert(powerBoxData, {
-                        Instance = powerBox,
-                        Position = powerBox:GetPivot().Position
-                    })
-                end
-            end
-        end
-    end
- 
-    if #powerBoxData > 0 then
-        local currentPos = humanoidRootPart.Position
-        table.sort(powerBoxData, function(a, b)
-            return (currentPos - a.Position).Magnitude < (currentPos - b.Position).Magnitude
-        end)
- 
-        local chosenBox = powerBoxData[1].Instance
-        local finalBoxTarget = powerBoxData[1].Position
- 
-        print("[Step 3] Executing safe mechanism for Power Box.")
-        
-        -- 🔽 1. TWEEN THẲNG ĐỨNG XUỐNG DƯỚI ĐẤT 30 STUDS
-        local startPos = humanoidRootPart.Position
-        local undergroundY = startPos.Y - 30
-        local stage1_Pos = Vector3.new(startPos.X, undergroundY, startPos.Z)
-        local currentRotation = CFrame.Angles(0, math.rad(humanoidRootPart.Orientation.Y), 0)
-        
-        print("[Mechanism] Tweening down 30 studs...")
-        tweenVertically(CFrame.new(stage1_Pos) * currentRotation, 15, humanoidRootPart)
-        task.wait(0.1)
-        
-        -- ↔️ 2. MOVE TO (HÀM CRAWL GỐC) ĐỂ LƯỚT NGANG TRONG LÒNG ĐẤT
-        print("[Mechanism] Moving to destination under the ground...")
-        -- Cố định độ cao Y ngầm ở mức -30 studs trong suốt quá trình bò ngang
-        adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character, undergroundY)
-        task.wait(0.1)
-        
-        -- 🔼 3. TWEEN THẲNG ĐỨNG TỪ DƯỚI ĐẤT TRỒI LÊN POWER BOX
-        print("[Mechanism] Tweening up to objective...")
-        local finalUpTarget = finalBoxTarget + Vector3.new(0, 3, 0)
-        tweenVertically(CFrame.new(finalUpTarget) * currentRotation, 15, humanoidRootPart)
-        task.wait(0.2)
- 
-        if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
-            local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
-            if prompt then
-                for i = 1, 3 do
-                    if fireproximityprompt then
-                        fireproximityprompt(prompt)
-                    else
-                        prompt:InputHoldBegin()
-                        task.wait(prompt.HoldDuration + 0.05)
-                        prompt:InputHoldEnd()
-                    end
-                    task.wait(0.1)
-                end
-                print("[Pipeline] Interaction successfully forced!")
-                interactionSuccess = true
-            end
-        end
-    end
- 
-    -- --- VOTE PLAY AGAIN SEQUENCE ---
-    task.wait(0.5) 
-    if interactionSuccess then
-        local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
-            and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
-            and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
- 
-        if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
-            pcall(function()
-                PlayAgainRemote:FireServer()
-            end)
-            print("[Play Again] Sequence executed successfully.")
-        else
-            warn("[Warning] VotePlayAgain remote path could not be found.")
-        end
-        print("Free and Keyless, script is in https://pastebin.com/V0wHqZe4")
-    end
-end
-
-runPipeline()
-
--- If a run somehow fails (either finding fuel function broke or smth) do a fresh new run
-task.spawn(function()
-    task.wait(60.0) -- Hard 1-minute safety timeout limit
-    
-    local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
-        and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
-        and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
-
-    if PlayAgainRemote then
-        print("[Watchdog Warning] Match timeout reached. Forcing server rotation.")
-        pcall(function()
-            PlayAgainRemote:FireServer()
-        end)
-    end
-end)
+runPowerBoxPipeline() [cite: 20]
