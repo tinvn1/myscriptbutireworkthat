@@ -1,6 +1,3 @@
-print("[SYSTEM] Initiating Underground Tunneling Physical Core... Dynamic Height Control.") [cite: 1]
-task.wait(3) [cite: 1]
-
 local Workspace = game:GetService("Workspace") [cite: 1]
 local RunService = game:GetService("RunService") [cite: 1]
 local Players = game:GetService("Players") [cite: 1]
