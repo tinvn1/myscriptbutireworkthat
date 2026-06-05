@@ -308,50 +308,52 @@ local function runPipeline()
         task.wait(0.5)
     end
  
-    -- STEP 3: OPTIMIZED POWER BOX QUERY & TRACKING (ZIP STRAIGHT TO POWER PLANT)
+    -- STEP 3: OPTIMIZED POWER BOX QUERY & TRACKING (FIX LAG VERSION)
     print("[Step 3] Scanning for closest Power Box model...")
-    local powerBoxData = {}
-    local interactionSuccess = false
+    local chosenBox = nil
+    local finalBoxTarget = nil
+    local shortestBoxDistance = math.huge
+    local currentPos = humanoidRootPart.Position
  
+    -- Tối ưu hóa: Quét trực tiếp và so sánh tuyến tính (O(n)), loại bỏ hoàn toàn table.sort gây lag
     if MapFolder and MapFolder:FindFirstChild("Tiles") then
-        for _, child in ipairs(MapFolder.Tiles:GetChildren()) do
+        local tiles = MapFolder.Tiles:GetChildren()
+        for i = 1, #tiles do
+            local child = tiles[i]
             if child.Name == "Power Plant" then
                 local powerBox = child:FindFirstChild("Power Box")
                 if powerBox and powerBox:IsA("Model") then
-                    table.insert(powerBoxData, {
-                        Instance = powerBox,
-                        Position = powerBox:GetPivot().Position
-                    })
+                    local boxPos = powerBox:GetPivot().Position
+                    local dist = (currentPos - boxPos).Magnitude
+                    if dist < shortestBoxDistance then
+                        shortestBoxDistance = dist
+                        chosenBox = powerBox
+                        finalBoxTarget = boxPos
+                    end
                 end
             end
         end
     end
  
-    if #powerBoxData > 0 then
-        local currentPos = humanoidRootPart.Position
-        table.sort(powerBoxData, function(a, b)
-            return (currentPos - a.Position).Magnitude < (currentPos - b.Position).Magnitude
-        end)
- 
-        local chosenBox = powerBoxData[1].Instance
-        local finalBoxTarget = powerBoxData[1].Position
- 
+    local interactionSuccess = false
+    if chosenBox and finalBoxTarget then
         print("[Step 3] Crawling directly to closest Power Box.")
         adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
-        task.wait(0.5)
+        task.wait(0.3) -- Nghỉ ngắn để nhân vật ổn định vị trí tọa độ
  
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
+                -- Tối ưu hóa loop kích hoạt: Giảm độ trễ thừa thãi tránh đơ luồng trò chơi
                 for i = 1, 3 do
                     if fireproximityprompt then
                         fireproximityprompt(prompt)
                     else
                         prompt:InputHoldBegin()
-                        task.wait(prompt.HoldDuration + 0.05)
+                        task.wait(prompt.HoldDuration + 0.02)
                         prompt:InputHoldEnd()
                     end
-                    task.wait(0.1)
+                    task.wait(0.05)
                 end
                 print("[Pipeline] Interaction successfully forced!")
                 interactionSuccess = true
