@@ -224,8 +224,9 @@ end
 local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     local finalTarget = targetPos + Vector3.new(0, 3, 0)
  
-    local FAST_SPEED = 35     
-    local SLOW_SPEED = 10     
+    -- ĐÃ FIX: Giảm tốc độ bay xuống thấp hơn để chống văng, mượt mà hơn
+    local FAST_SPEED = 18      -- Giảm từ 35 xuống 18 để bay chậm lại an toàn
+    local SLOW_SPEED = 8       -- Giảm từ 10 xuống 8 khi ở gần vật cản
     local STEP_DISTANCE = 0.25 
  
     local CLEARANCE_COOLDOWN = 0.5 
@@ -266,7 +267,7 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
         local activeStepDistance = 0.25 
         local currentAllowedSpeed = SLOW_SPEED
         if os.clock() - lastWallDetectedTime >= CLEARANCE_COOLDOWN then
-            activeStepDistance = 1.4  
+            activeStepDistance = 1.0  -- Giảm bước nhảy từ 1.4 xuống 1.0 để giảm giật hình
             currentAllowedSpeed = FAST_SPEED
         end
  
