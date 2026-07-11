@@ -225,7 +225,7 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     local finalTarget = targetPos + Vector3.new(0, 3, 0)
  
     -- ĐÃ FIX: Giảm tốc độ bay xuống thấp hơn để chống văng, mượt mà hơn
-    local FAST_SPEED = 18      -- Giảm từ 35 xuống 18 để bay chậm lại an toàn
+    local FAST_SPEED = 25      -- Giảm từ 35 xuống 18 để bay chậm lại an toàn
     local SLOW_SPEED = 8       -- Giảm từ 10 xuống 8 khi ở gần vật cản
     local STEP_DISTANCE = 0.25 
  
