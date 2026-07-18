@@ -13,7 +13,7 @@ while ContentProvider.RequestQueueSize > 0 do
 end
  
 print("The game is loaded in. Wait more for things to fully load")
-task.wait(6.0)
+task.wait(2.0)
 print("Complete! Starting the farm.")
  
 -- SERVICES --
