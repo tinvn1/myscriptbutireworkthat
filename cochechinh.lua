@@ -1,13 +1,6 @@
--- Made by TheAnonymous in RScript / Theultimateuser in Scriptblox
+-- -- Made by TheAnonymous in RScript / Theultimateuser in Scriptblox
+-- SỬA LỖI: Fix lỗi nhân vật tự lên cao bằng mặt đất rồi mới di chuyển ở phần 3
 
--- Feel free to adjust
--- The ultimate solo gem farming (Slapped some stuff with AI so no hate :) )
--- Remember to put this into auto-execution folder or smth, each run is completed in around 25-35 seconds so 2-2.4 gems/min
--- This is FREE and KEYLESS
--- You shall not copy this code and add key system on top of it for pure greediness. Don't be like Racky in Rscript where he tries to make money off from mine without adding new stuff LOL (seriously, add some unique stuff that makes it worth the trouble)
--- You can modify it and give credits, it's fine :PP
-
--- The script works like this: finds two fuels to upgrade the generator -> go fix the closest power plant (main way to get gem)
 print("Loading")
  
 if not game:IsLoaded() then
@@ -20,10 +13,8 @@ while ContentProvider.RequestQueueSize > 0 do
 end
  
 print("The game is loaded in. Wait more for things to fully load")
--- This is based on your pings so the finding fuel function doesn't break (adjust it to your liking)
 task.wait(6.0)
 print("Complete! Starting the farm.")
- 
  
 -- SERVICES --
 local Workspace = game:GetService("Workspace")
@@ -40,7 +31,7 @@ local AdjustBackpackRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForCh
 local cachedGeneratorLocation = nil
 local PermanentNoclipEnabled = true
  
--- --- Safety First Lads You gotta be the sneakiest to be the ultimate gem grinder ---
+-- --- Safety First Lads ---
 local function evacuateServer(reason)
     warn("[CRITICAL EVACUATION]: " .. reason)
     task.spawn(function()
@@ -53,22 +44,17 @@ local function evacuateServer(reason)
                 PlayAgainRemote:FireServer()
             end)
             print("ESCAPING BY PLAYING AGAIN")
-            task.wait(1.0) -- Waiting for the remote to work
+            task.wait(1.0)
         end
-        
-        -- 2. Forceful escape by getting kicked if the remote is slow as heck
         LocalPlayer:Kick("[WARNING] UNKNOWN PLAYER DETECTED!")
     end)
-    
-	-- Stops the script immediately
     error("Script execution terminated.")
 end
 
--- Checking if there is mod already joined
 if #Players:GetPlayers() > 1 then
     evacuateServer("Pre-existing player DETECTED!")
 end
--- Hook live background radar listener for immediate exit on mid-game arrivals
+
 Players.PlayerAdded:Connect(function(newPlayer)
     if newPlayer ~= LocalPlayer then
         evacuateServer("Player entry detected (" .. newPlayer.Name .. "). Executing immediate escape.")
@@ -90,14 +76,12 @@ local function StartPermanentNoclip()
  
             local character = LocalPlayer.Character
             if character then
-                -- Instantly strips all collisions before physics steps process
                 for _, child in ipairs(character:GetDescendants()) do
                     if child:IsA("BasePart") and child.CanCollide then
                         child.CanCollide = false
                     end
                 end
  
-                -- Zeroes velocity to stop anti-cheat rubberbanding
                 local hrp = character:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -108,7 +92,6 @@ local function StartPermanentNoclip()
  
     ConnectNoclip()
  
-    -- Re-applies the permanent noclip loop whenever you respawn
     LocalPlayer.CharacterAdded:Connect(function()
         task.wait(0.1)
         ConnectNoclip()
@@ -117,13 +100,11 @@ end
 
 StartPermanentNoclip()
  
--- Find the closest fuel's location
 local excludeFuel = {}
 
 local function getClosestFuelPosition(currentPos)
     local foundValidFuel = nil
     
-    -- This loop will continuously retry until a valid item is found or none remain
     while not foundValidFuel do
         local bestTarget = nil
         local shortestDistance = math.huge
@@ -131,12 +112,10 @@ local function getClosestFuelPosition(currentPos)
         if DroppedItemsFolder then
             for _, item in ipairs(DroppedItemsFolder:GetChildren()) do
                 if item.Name == "Fuel" then
-                    -- Check if this is in the exclusion table
                     if not excludeFuel[item] then
                         local fuelPos = item:GetPivot().Position
                         local dist = (currentPos - fuelPos).Magnitude
                         
-                        -- Track the temporary closest item for this specific scan cycle
                         if dist < shortestDistance then
                             shortestDistance = dist
                             bestTarget = item
@@ -146,26 +125,21 @@ local function getClosestFuelPosition(currentPos)
             end
         end
         
-        -- If no good fuel exist, uh we exit and everything breaks but this ain't happening I'm sure
         if not bestTarget then
             break
         end
         
-        -- Checking if the fuel is on top of a tall object to ignore
         local targetPosition = bestTarget:GetPivot().Position
         local heightDifference = targetPosition.Y - currentPos.Y
         
         if heightDifference <= 2 then
-            -- CRITERIA MET: Assign the item to exit the retry loop successfully
             foundValidFuel = bestTarget
         else
-            -- CRITERIA FAILED: Add this specific item instance to the exclusion table
             print("[-] Fuel anomaly detected at height: " .. tostring(targetPosition.Y) .. ". Excluding item.")
             excludeFuel[bestTarget] = true
         end
     end
     
-    -- Returns the item instance (or nil if the map is empty) to prevent unassigned runtime exceptions
     return foundValidFuel
 end
  
@@ -190,7 +164,6 @@ local function getGeneratorPosition()
     return nil
 end
 
--- The more overpowered version, it can literally teleport fuel to the generator (People gonna skid this thing hard trust me)
 local function FuelTeleport(hrp, targetFuel)
     local generatorLoc = getGeneratorPosition()
     if not hrp or not targetFuel or not generatorLoc then return end
@@ -200,33 +173,26 @@ local function FuelTeleport(hrp, targetFuel)
     local networkRemote = itemDrag and itemDrag:FindFirstChild("RequestNetworkOwnership")
 
     if fuelUnion and networkRemote then
-        -- Hippity Hoppity the fuel is now my property
         pcall(function()
             networkRemote:FireServer(fuelUnion)
         end)
         
-        -- small delay so it doesn't blow up
         task.wait(0.12) 
 
-        -- Instantly teleport item directly to the generator
         pcall(function()
             targetFuel:PivotTo(CFrame.new(generatorLoc) + Vector3.new(0, 1, 0))
         end)
         
-        -- small delay so it doesn't blow up
         task.wait(0.15) 
     end
 end
 
-
- 
--- TRAVEL COMPONENT 
-local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
+-- TRAVEL COMPONENT (Đã cập nhật tham số ignoreLockY để sửa lỗi Phần 3)
+local function adaptiveCrawlTo(targetPos, humanoidRootPart, character, ignoreLockY)
     local finalTarget = targetPos + Vector3.new(0, 3, 0)
  
-    -- ĐÃ FIX: Giảm tốc độ bay xuống thấp hơn để chống văng, mượt mà hơn
-    local FAST_SPEED = 25      -- Giảm từ 35 xuống 18 để bay chậm lại an toàn
-    local SLOW_SPEED = 8       -- Giảm từ 10 xuống 8 khi ở gần vật cản
+    local FAST_SPEED = 25      
+    local SLOW_SPEED = 8       
     local STEP_DISTANCE = 0.25 
  
     local CLEARANCE_COOLDOWN = 0.5 
@@ -241,7 +207,9 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
     while true do
         if not humanoidRootPart or not humanoidRootPart.Parent then break end
         local currentPos = humanoidRootPart.Position
-        local flatTarget = Vector3.new(finalTarget.X, lockedYHeight, finalTarget.Z)
+        
+        -- Nếu ignoreLockY = true, đi chéo thẳng tới mục tiêu (bao gồm cả độ cao Y mong muốn)
+        local flatTarget = ignoreLockY and finalTarget or Vector3.new(finalTarget.X, lockedYHeight, finalTarget.Z)
         local remainingVector = flatTarget - currentPos
         local totalDistance = remainingVector.Magnitude
  
@@ -267,15 +235,17 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, character)
         local activeStepDistance = 0.25 
         local currentAllowedSpeed = SLOW_SPEED
         if os.clock() - lastWallDetectedTime >= CLEARANCE_COOLDOWN then
-            activeStepDistance = 1.0  -- Giảm bước nhảy từ 1.4 xuống 1.0 để giảm giật hình
+            activeStepDistance = 1.0  
             currentAllowedSpeed = FAST_SPEED
         end
  
         local delayInterval = activeStepDistance / currentAllowedSpeed
         local nextPosition = currentPos + (direction * activeStepDistance)
-        local flattenedPosition = Vector3.new(nextPosition.X, lockedYHeight, nextPosition.Z)
+        
+        -- Tính toán vị trí tiếp theo dựa trên cấu hình Y mong muốn
+        local nextCFramePosition = ignoreLockY and nextPosition or Vector3.new(nextPosition.X, lockedYHeight, nextPosition.Z)
  
-        humanoidRootPart.CFrame = CFrame.new(flattenedPosition)
+        humanoidRootPart.CFrame = CFrame.new(nextCFramePosition)
         task.wait(delayInterval)
     end
 end
@@ -293,7 +263,7 @@ local function runPipeline()
     local fuelOne = getClosestFuelPosition(humanoidRootPart.Position)
     if fuelOne then
         print("[Step 1] Moving to first closest fuel.")
-        adaptiveCrawlTo(fuelOne:GetPivot().Position, humanoidRootPart, character)
+        adaptiveCrawlTo(fuelOne:GetPivot().Position, humanoidRootPart, character, false)
         task.wait(0.3)
         FuelTeleport(humanoidRootPart, fuelOne)
         task.wait(0.5)
@@ -303,20 +273,19 @@ local function runPipeline()
     local fuelTwo = getClosestFuelPosition(humanoidRootPart.Position)
     if fuelTwo then
         print("[Step 2] Moving to second closest fuel.")
-        adaptiveCrawlTo(fuelTwo:GetPivot().Position, humanoidRootPart, character)
+        adaptiveCrawlTo(fuelTwo:GetPivot().Position, humanoidRootPart, character, false)
         task.wait(0.3)
         FuelTeleport(humanoidRootPart, fuelTwo)
         task.wait(0.5)
     end
  
-    -- STEP 3: OPTIMIZED POWER BOX QUERY & TRACKING (FIX LAG VERSION)
+    -- STEP 3: OPTIMIZED POWER BOX QUERY & TRACKING
     print("[Step 3] Scanning for closest Power Box model...")
     local chosenBox = nil
     local finalBoxTarget = nil
     local shortestBoxDistance = math.huge
     local currentPos = humanoidRootPart.Position
  
-    -- Tối ưu hóa: Quét trực tiếp và so sánh tuyến tính (O(n)), loại bỏ hoàn toàn table.sort gây lag
     if MapFolder and MapFolder:FindFirstChild("Tiles") then
         local tiles = MapFolder.Tiles:GetChildren()
         for i = 1, #tiles do
@@ -339,16 +308,17 @@ local function runPipeline()
     local interactionSuccess = false
     if chosenBox and finalBoxTarget then
         print("[Step 3] Crawling directly to closest Power Box.")
-        adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character)
-        task.wait(0.3) -- Nghỉ ngắn để nhân vật ổn định vị trí tọa độ
+        -- ĐÃ FIX: Thêm tham số `true` ở cuối để nhân vật di chuyển mượt mà thẳng tới mục tiêu mặt đất, không bị giật lên cao trước khi đi
+        adaptiveCrawlTo(finalBoxTarget, humanoidRootPart, character, true)
+        task.wait(0.3) 
  
         if (humanoidRootPart.Position - finalBoxTarget).Magnitude < 15 then
             local prompt = chosenBox:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then
-                -- Tối ưu hóa loop kích hoạt: Giảm độ trễ thừa thãi tránh đơ luồng trò chơi
                 for i = 1, 3 do
                     if fireproximityprompt then
                         fireproximityprompt(prompt)
+                    -- Fallback nếu executor không có hàm fireproximityprompt công khai
                     else
                         prompt:InputHoldBegin()
                         task.wait(prompt.HoldDuration + 0.02)
@@ -383,9 +353,9 @@ end
 
 runPipeline()
 
--- If a run somehow fails (either finding fuel function broke or smth) do a fresh new run
+-- Watchdog Timer
 task.spawn(function()
-    task.wait(60.0) -- Hard 1-minute safety timeout limit
+    task.wait(60.0) 
     
     local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
         and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
