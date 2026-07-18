@@ -353,7 +353,7 @@ end
 
 runPipeline()
 
--- Watchdog Timer
+-- Watchdog Timer (60s gốc)
 task.spawn(function()
     task.wait(60.0) 
     
@@ -363,6 +363,23 @@ task.spawn(function()
 
     if PlayAgainRemote then
         print("[Watchdog Warning] Match timeout reached. Forcing server rotation.")
+        pcall(function()
+            PlayAgainRemote:FireServer()
+        end)
+    end
+end)
+
+-- --- NEW: AFK REJOIN WATCHDOG (90 giây) ---
+-- Tự động kích hoạt VotePlayAgain nếu vòng lặp bị kẹt hoặc AFK quá 1 phút 30 giây nhằm bảo đảm tính liên tục.
+task.spawn(function()
+    task.wait(90.0) 
+    
+    local PlayAgainRemote = ReplicatedStorage:FindFirstChild("Remotes") 
+        and ReplicatedStorage.Remotes:FindFirstChild("Misc") 
+        and ReplicatedStorage.Remotes.Misc:FindFirstChild("VotePlayAgain")
+
+    if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
+        print("[AFK Watchdog] 1m30s AFK Limit Exceeded! Forcing loop restart via VotePlayAgain.")
         pcall(function()
             PlayAgainRemote:FireServer()
         end)
