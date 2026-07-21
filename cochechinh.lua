@@ -22,7 +22,7 @@ end
  
 print("The game is loaded in. Wait more for things to fully load")
 -- This is based on your pings so the finding fuel function doesn't break (adjust it to your liking)
-task.wait(6.0)
+task.wait(2.0)
 print("Complete! Starting the farm.")
  
  
