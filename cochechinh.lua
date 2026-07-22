@@ -31,7 +31,6 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService = game:GetService("TeleportService") -- [ĐÃ THÊM] Service dùng để Rejoin
  
 -- --- CONFIGURATION & REFERENCES ---
 local LocalPlayer = Players.LocalPlayer
@@ -43,18 +42,6 @@ local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
  
 local cachedGeneratorLocation = nil
 local PermanentNoclipEnabled = true
-
--- [ĐÃ THÊM] Hàm thực hiện Rejoin Server
-local function safeRejoin()
-    print("[REJOIN] Attempting to rejoin server...")
-    pcall(function()
-        if #Players:GetPlayers() <= 1 then
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        else
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-        end
-    end)
-end
  
 -- --- Safety First Lads You gotta be the sneakiest to be the ultimate gem grinder ---
 local function evacuateServer(reason)
@@ -402,22 +389,18 @@ Players.PlayerAdded:Connect(function(newPlayer)
     end
 end)
  
--- [CẬP NHẬT TRÌNH THEO DÕI TIMEOUT & REJOIN SAU 90 GIÂY]
+-- Tận dụng cơ chế gọi PlayAgainRemote từ cuối Bước 3 sau 90 giây
 task.spawn(function()
-    task.wait(90.0) -- Chờ đủ 90 giây theo yêu cầu
+    task.wait(90.0) -- Tăng thời gian chờ lên đúng 90 giây
 
-    print("[WARNING!] Hard 90-second safety timeout reached.")
-    if PlayAgainRemote then
-        print("Attempting PlayAgain Remote first...")
+    if PlayAgainRemote and PlayAgainRemote:IsA("RemoteEvent") then
+        print("[WARNING!] 90s timeout reached. Re-triggering Play Again mechanism.")
         pcall(function()
             PlayAgainRemote:FireServer()
         end)
+    else
+        warn("[WARNING!] 90s timeout reached but PlayAgainRemote was not found.")
     end
-
-    -- Đợi thêm 3 giây xem Remote có phản hồi chuyển trận không, nếu không chuyển thì Rejoin ngay
-    task.wait(3.0)
-    print("Remote execution delayed/failed. Executing forced Rejoin!")
-    safeRejoin()
 end)
  
 -- If you somehow died, it will do a fresh new run
