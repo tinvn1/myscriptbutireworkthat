@@ -31,6 +31,7 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService") -- [ĐÃ THÊM] Service dùng để Rejoin
  
 -- --- CONFIGURATION & REFERENCES ---
 local LocalPlayer = Players.LocalPlayer
@@ -42,6 +43,18 @@ local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
  
 local cachedGeneratorLocation = nil
 local PermanentNoclipEnabled = true
+
+-- [ĐÃ THÊM] Hàm thực hiện Rejoin Server
+local function safeRejoin()
+    print("[REJOIN] Attempting to rejoin server...")
+    pcall(function()
+        if #Players:GetPlayers() <= 1 then
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        else
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+        end
+    end)
+end
  
 -- --- Safety First Lads You gotta be the sneakiest to be the ultimate gem grinder ---
 local function evacuateServer(reason)
@@ -389,16 +402,22 @@ Players.PlayerAdded:Connect(function(newPlayer)
     end
 end)
  
--- If a run somehow fails (either finding fuel function broke or smth), it will do a fresh new run
+-- [CẬP NHẬT TRÌNH THEO DÕI TIMEOUT & REJOIN SAU 90 GIÂY]
 task.spawn(function()
-    task.wait(60.0) -- Hard 1-minute safety timeout limit
- 
+    task.wait(90.0) -- Chờ đủ 90 giây theo yêu cầu
+
+    print("[WARNING!] Hard 90-second safety timeout reached.")
     if PlayAgainRemote then
-        print("[WARNING!] Match timeout reached. Restarting a run.")
+        print("Attempting PlayAgain Remote first...")
         pcall(function()
             PlayAgainRemote:FireServer()
         end)
     end
+
+    -- Đợi thêm 3 giây xem Remote có phản hồi chuyển trận không, nếu không chuyển thì Rejoin ngay
+    task.wait(3.0)
+    print("Remote execution delayed/failed. Executing forced Rejoin!")
+    safeRejoin()
 end)
  
 -- If you somehow died, it will do a fresh new run
