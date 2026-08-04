@@ -86,7 +86,7 @@ local function StartPermanentNoclip()
                 if noclipConnection then noclipConnection:Disconnect() end
                 return
             end
-            if character and character:Parent then
+            if character and character.Parent then
                 for _, child in ipairs(character:GetDescendants()) do
                     if child:IsA("BasePart") and child.CanCollide then
                         child.CanCollide = false
@@ -192,7 +192,7 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, char)
         local deltaTime = heartbeatEvent:Wait()
         local currentPos = humanoidRootPart.Position
         
-        local roofCheck = workspace:Raycast(currentPos, Vector3.new(0, HOVER_HEIGHT + 2, 0), raycastParams)
+        local roofCheck = Workspace:Raycast(currentPos, Vector3.new(0, HOVER_HEIGHT + 2, 0), raycastParams)
         local targetYHeight = baseGroundY + HOVER_HEIGHT
         
         if roofCheck and roofCheck.Instance and roofCheck.Instance.CanCollide then
@@ -214,14 +214,14 @@ local function adaptiveCrawlTo(targetPos, humanoidRootPart, char)
         end
 
         local direction = remainingVector.Unit
-        local rayResult = workspace:Raycast(currentPos, direction * 5, raycastParams)
+        local rayResult = Workspace:Raycast(currentPos, direction * 5, raycastParams)
         if rayResult and rayResult.Instance and rayResult.Instance.CanCollide then
             lastWallDetectedTime = os.clock()
         end
 
         local currentAllowedSpeed = SLOW_SPEED
         if os.clock() - lastWallDetectedTime >= CLEARANCE_COOLDOWN then
-            local serverTime = workspace:GetServerTimeNow()
+            local serverTime = Workspace:GetServerTimeNow()
             if (serverTime % 1.0) < (1.0 - SLOW_ZONE_DURATION) then
                 currentAllowedSpeed = BURST_SPEED
             end
